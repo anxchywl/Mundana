@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Mundana</title>
+    <meta name="description" content="Press anywhere on a fractal to hear its orbit. Eight fractals and chaotic maps, played as sound." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600&family=Source+Serif+4:ital,wght@1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="stage">
+      <canvas id="fractal"></canvas>
+      <canvas id="overlay"></canvas>
+    </main>
+
+    <!-- which fractal -->
+    <header class="card info">
+      <div class="title">
+        <button class="round sm" data-act="prev" aria-label="Previous fractal"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" /></svg></button>
+        <button class="name" data-act="gallery" title="All fractals"><span class="f-name"></span></button>
+        <button class="round sm" data-act="next" aria-label="Next fractal"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" /></svg></button>
+      </div>
+      <p class="formula f-formula"></p>
+      <p class="note f-note"></p>
+      <div class="param" hidden>
+        <label><span class="param-name"></span><output class="param-value"></output></label>
+        <input class="param-range" type="range" />
+      </div>
+    </header>
+
+    <!-- top right corner (bottom right on a phone): what this is -->
+    <div class="corner">
+      <section id="about" class="card pop about" aria-label="About">
+        <h2>Hear the shape of a fractal</h2>
+        <p class="lede">
+          A fractal is drawn by applying one formula to every point, over and over. Each point traces its own path, its
+          <em>orbit</em>. Here that path becomes sound: its sideways and up-down motion go to your left and right speakers.
+        </p>
+        <ol class="how">
+          <li><span><b>Press and hold</b> anywhere on the picture to hear that point. Drag to glide from sound to sound.</span></li>
+          <li><span><b>Listen to what it does.</b> A point that settles into a loop plays a steady note. A restless one makes noise. One that flies away clicks once, and its path turns red.</span></li>
+          <li><span><b>Explore.</b> Zoom in on the edges, browse the gallery, or press the round button to land somewhere random.</span></li>
+        </ol>
+        <p class="tip">Headphones help. The sound moves between your ears.</p>
+        <p class="origin">
+          <b>Mundana</b> is named after <em>musica mundana</em>, the music of the world: the old belief that orbits make
+          music no one can hear. Here you can.
+        </p>
+        <div class="keys desk-only">
+          <span><kbd>G</kbd>gallery</span>
+          <span><kbd>X</kbd>random</span>
+          <span><kbd>J</kbd>Julia set</span>
+          <span><kbd>C</kbd>colours</span>
+          <span><kbd>R</kbd>reset view</span>
+        </div>
+      </section>
+      <button class="round md about-btn" data-act="about" aria-label="About this app" title="About"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" /><path d="M10 9v5M10 6.3v.1" /></svg></button>
+    </div>
+
+    <!-- what the pressed point does -->
+    <section id="readout" class="card readout" hidden aria-live="polite">
+      <div class="r-actions">
+        <button data-act="link" aria-label="Copy link" title="Copy link"><svg viewBox="0 0 20 20"><path d="M8.5 11.5a3 3 0 0 0 4.2 0l2.6-2.6a3 3 0 0 0-4.2-4.2l-1 1M11.5 8.5a3 3 0 0 0-4.2 0l-2.6 2.6a3 3 0 0 0 4.2 4.2l1-1" /></svg></button>
+        <button data-act="stop" aria-label="Stop" title="Stop"><svg viewBox="0 0 20 20"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5" /></svg></button>
+      </div>
+      <div class="r-text">
+        <p id="r-what" class="big"></p>
+        <p id="r-note"></p>
+        <p id="r-point" class="small"></p>
+      </div>
+    </section>
+
+    <!-- the big button: random fractal, random sound. Its dashed ring turns while the fractal morphs -->
+    <div class="dock">
+      <button class="round md" data-act="gallery" aria-label="All fractals" title="All fractals"><svg viewBox="0 0 20 20"><rect x="3.5" y="3.5" width="5" height="5" rx="1.2" /><rect x="11.5" y="3.5" width="5" height="5" rx="1.2" /><rect x="3.5" y="11.5" width="5" height="5" rx="1.2" /><rect x="11.5" y="11.5" width="5" height="5" rx="1.2" /></svg></button>
+      <button id="random" class="random" data-act="surprise" aria-label="Random fractal and sound">
+        <svg viewBox="0 0 64 64" class="ring"><circle cx="32" cy="32" r="29" /></svg>
+        <svg viewBox="0 0 24 24" class="glyph"><path d="M12 5 18.5 16.5h-13z" /><circle cx="12" cy="5" r="2" /><circle cx="18.5" cy="16.5" r="2" /><circle cx="5.5" cy="16.5" r="2" /></svg>
+      </button>
+      <button class="round md phone-only settings-btn" data-act="settings" aria-label="Settings"><svg viewBox="0 0 20 20"><path d="M3 6h9M15 6h2M3 14h3M9 14h8" /><circle cx="13.5" cy="6" r="1.8" /><circle cx="7.5" cy="14" r="1.8" /></svg></button>
+    </div>
+
+    <!-- bottom right: settings sits above zoom, and opens upward from its own button -->
+    <div class="tools">
+      <section id="settings" class="card pop settings" aria-label="Settings">
+        <div class="set-group">
+          <p class="set-label">Colours</p>
+          <div class="swatches">
+            <button data-colour="0"><span class="sw sw-plain"></span>Plain</button>
+            <button data-colour="1"><span class="sw sw-tones"></span>Tones</button>
+            <button data-colour="2"><span class="sw sw-vivid"></span>Vivid</button>
+          </div>
+        </div>
+        <div class="set-group">
+          <button class="toggle" data-act="julia"><span class="julia-lbl">Julia set</span><span class="switch"></span></button>
+          <button class="toggle" data-act="damp"><span>Notes fade out</span><span class="switch"></span></button>
+          <button class="toggle" data-act="animate"><span>Moving path</span><span class="switch"></span></button>
+        </div>
+        <div class="set-group">
+          <label class="slider"><span>Volume</span><input data-input="volume" type="range" min="0" max="1.5" step="0.01" value="0.7" /></label>
+          <label class="slider" title="Orbit steps per second. Period p sounds at this rate divided by p.">
+            <span>Pitch <output class="rate-value"></output></span>
+            <input data-input="rate" type="range" min="1000" max="12000" step="100" value="4000" />
+          </label>
+        </div>
+        <div class="set-links">
+          <button data-act="snap">Save picture</button>
+          <button data-act="reset">Reset view</button>
+        </div>
+      </section>
+      <div class="tool-stack">
+        <button class="round md desk-only settings-btn" data-act="settings" aria-label="Settings" title="Settings"><svg viewBox="0 0 20 20"><path d="M3 6h9M15 6h2M3 14h3M9 14h8" /><circle cx="13.5" cy="6" r="1.8" /><circle cx="7.5" cy="14" r="1.8" /></svg></button>
+        <div class="zoom desk-only">
+          <button data-act="zoom-in" aria-label="Zoom in"><svg viewBox="0 0 20 20"><path d="M10 5v10M5 10h10" /></svg></button>
+          <button data-act="zoom-out" aria-label="Zoom out"><svg viewBox="0 0 20 20"><path d="M5 10h10" /></svg></button>
+        </div>
+        <button class="round md desk-only" data-act="reset" aria-label="Reset view" title="Reset view"><svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 1 0 2-4.5M4 4v3h3" /></svg></button>
+      </div>
+    </div>
+
+    <p id="hint" class="hint">Press and hold anywhere to hear it</p>
+    <p id="limit" class="limit" hidden>That is as deep as the GPU can see</p>
+    <p id="toast" class="toast" role="status" aria-live="polite"></p>
+
+    <!-- every fractal -->
+    <section id="gallery" class="gallery" aria-label="All fractals">
+      <div class="gallery-sheet">
+        <header>
+          <h2>All fractals</h2>
+          <input id="g-search" type="search" placeholder="Search" autocomplete="off" aria-label="Search fractals" />
+          <button class="round sm" data-act="gallery" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5 5 15" /></svg></button>
+        </header>
+        <div id="gallery-body"></div>
+      </div>
+    </section>
+
+    <!-- the first visit -->
+    <section id="welcome" class="welcome" hidden>
+      <div class="sheet">
+        <h2>Every point of a fractal has a sound.</h2>
+        <p>Press anywhere on the picture. The path the point traces as the formula repeats is played as sound.</p>
+        <button class="start" data-act="start">Start listening</button>
+      </div>
+    </section>
+
+    <div id="nogl" class="help" hidden>
+      <div class="sheet"><h2>This browser cannot draw it.</h2><p>The explorer needs WebGL2. Try a current Chrome, Firefox, Safari or Edge.</p></div>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
