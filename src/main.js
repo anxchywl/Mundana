@@ -623,7 +623,11 @@ stage.addEventListener('pointerdown', (e) => {
   startAudio();
   closeSettings();
   closeSettings();
-  stage.setPointerCapture(e.pointerId);
+  try {
+    stage.setPointerCapture(e.pointerId);
+  } catch {
+    // some pens and synthetic pointers cannot be captured; dragging still works inside the stage
+  }
   const p = local(e);
   pointers.set(e.pointerId, p);
   if (pointers.size === 2) {
