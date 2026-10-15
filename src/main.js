@@ -270,6 +270,68 @@ const snapshot = () => {
   frame = 0;
 };
 
+const spotName = () => {
+  const i = state.info;
+  if (!i) return 'sound';
+  if (i.kind === 'cycle' && i.period > 1) return `period${i.period}`;
+  return i.kind;
+};
+
+/** render the current point offline with the same worklet, and save it as a 16-bit stereo WAV */
+const saveSound = async () => {
+  if (!state.point) {
+    toast('Press a point first, then save its sound.');
+    return;
+  }
+  toast('Rendering the sound …');
+  const seconds = state.sustain ? 4 : 3;
+  const sr = 48000;
+  const oc = new OfflineAudioContext(2, sr * seconds, sr);
+  await oc.audioWorklet.addModule(workletURL);
+  const node = new AudioWorkletNode(oc, 'orbit-synth', {numberOfInputs: 0, outputChannelCount: [2]});
+  node.connect(oc.destination);
+  for (const m of setupMessages()) node.port.postMessage(m);
+  node.port.postMessage({type: 'point', p: state.point});
+  // messages reach the audio thread asynchronously; give them a moment before rendering starts
+  await new Promise((r) => setTimeout(r, 60));
+  const buf = await oc.startRendering();
+  const L = buf.getChannelData(0);
+  const R = buf.getChannelData(1);
+  let peak = 1e-9;
+  for (let i = 0; i < L.length; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
+  if (peak < 1e-4) {
+    toast('That point is silent: it escapes or sits still. Try another.');
+    return;
+  }
+  // normalised to -1 dB, with a short fade at the end so it cuts cleanly
+  const g = 0.89 / peak;
+  const n = L.length;
+  const fade = Math.round(sr * 0.03);
+  const data = new DataView(new ArrayBuffer(44 + n * 4));
+  const str = (o, s) => [...s].forEach((ch, i) => data.setUint8(o + i, ch.charCodeAt(0)));
+  str(0, 'RIFF');
+  data.setUint32(4, 36 + n * 4, true);
+  str(8, 'WAVEfmt ');
+  data.setUint32(16, 16, true);
+  data.setUint16(20, 1, true);
+  data.setUint16(22, 2, true);
+  data.setUint32(24, sr, true);
+  data.setUint32(28, sr * 4, true);
+  data.setUint16(32, 4, true);
+  data.setUint16(34, 16, true);
+  str(36, 'data');
+  data.setUint32(40, n * 4, true);
+  for (let i = 0; i < n; i++) {
+    const f = i > n - fade ? (n - i) / fade : 1;
+    data.setInt16(44 + i * 4, Math.max(-1, Math.min(1, L[i] * g * f)) * 32767, true);
+    data.setInt16(46 + i * 4, Math.max(-1, Math.min(1, R[i] * g * f)) * 32767, true);
+  }
+  const url = URL.createObjectURL(new Blob([data], {type: 'audio/wav'}));
+  download(url, `${cur().key}-${spotName()}.wav`);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('Saved as a WAV file.');
+};
+
 const copyLink = async () => {
   writeHash();
   try {
@@ -735,6 +797,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'a') toggleAnimate();
   else if (k === 'r') reset();
   else if (k === 's') snapshot();
+  else if (k === 'w') saveSound();
   else if (k === 'l') copyLink();
   else if (k === ' ') {
     spaceHeld = true;
@@ -855,6 +918,7 @@ const actions = {
   surprise,
   'zoom-in': () => zoomBy(1.6),
   'zoom-out': () => zoomBy(1 / 1.6),
+  wav: saveSound,
   snap: snapshot,
   link: copyLink,
   reset,
