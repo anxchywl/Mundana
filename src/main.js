@@ -993,7 +993,9 @@ const syncUI = () => {
     b.classList.toggle('disabled', !!f.noJulia);
   });
   $$('.julia-lbl').forEach((l) => (l.textContent = state.picking ? 'Julia set: choose c' : 'Julia set'));
-  $$('.rate-value').forEach((el) => (el.textContent = `${state.rate.toLocaleString('en')} steps/s`));
+  // pitch is shown as a shift from the normal rate, in octaves
+  const oct = Math.log2(state.rate / RATE);
+  $$('.rate-value').forEach((el) => (el.textContent = Math.abs(oct) < 0.02 ? 'normal' : `${oct > 0 ? '+' : '−'}${Math.abs(oct).toFixed(1)} oct`));
   stage.classList.toggle('picking', state.picking);
   showReadout();
 };
