@@ -26,6 +26,7 @@ export const families = [
   {key: 'ship', short: 'Burning ship', name: 'The burning ship family', note: 'One absolute value breaks the symmetry, and stable chaos appears: growls, breaths, engines.'},
   {key: 'parade', short: 'Inventions', name: 'Two inventions', note: 'Shapes made up for their sound in the original Fractal Sound Explorer.'},
   {key: 'maps', short: 'Chaotic maps', name: 'Chaotic maps', note: 'Physics and dynamics. Here c holds the two constants of the map, and every point is a different system.'},
+  {key: 'attractors', short: 'Attractors', name: 'Strange attractors', note: 'Nothing escapes, so everywhere makes a sound. Noise, buzz and texture.'},
 ];
 
 export const fractals = [
@@ -44,6 +45,108 @@ export const fractals = [
     },
     glsl: 'return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;',
   },
+  {
+    key: 'multibrot',
+    family: 'mandel',
+    name: 'Multibrot',
+    formula: 'zᵈ + c',
+    note: 'The Mandelbrot set with a different power. Slide d and the bulbs multiply: d − 1 fold symmetry, new periods everywhere.',
+    view: {cx: 0, cy: 0, span: 3},
+    normalized: true,
+    param: {name: 'power d', min: 2, max: 8, step: 0.01, value: 3},
+    step(x, y, cx, cy, out, k) {
+      const r = Math.pow(x * x + y * y, k / 2);
+      const t = Math.atan2(y, x) * k;
+      out[0] = r * Math.cos(t) + cx;
+      out[1] = r * Math.sin(t) + cy;
+    },
+    glsl: 'float r = pow(dot(z, z), 0.5 * uP); float t = atan(z.y, z.x) * uP; return r * vec2(cos(t), sin(t)) + c;',
+  },
+  {
+    key: 'tricorn',
+    family: 'mandel',
+    name: 'Tricorn',
+    formula: 'z̄² + c',
+    note: 'Square the mirror image of z instead. Three corners, and orbits that flip direction every step, so the stereo image swaps sides.',
+    view: {cx: -0.3, cy: 0, span: 3},
+    normalized: true,
+    step(x, y, cx, cy, out) {
+      out[0] = x * x - y * y + cx;
+      out[1] = -2 * x * y + cy;
+    },
+    glsl: 'return vec2(z.x * z.x - z.y * z.y, -2.0 * z.x * z.y) + c;',
+  },
+  {
+    key: 'lambda',
+    family: 'mandel',
+    name: 'Logistic (lambda) set',
+    formula: 'c z (1 − z)',
+    note: 'The population model behind period doubling. Along the real line it plays the famous route to chaos: 1, 2, 4, 8 … then noise.',
+    view: {cx: 1, cy: 0, span: 5.4},
+    start: [0.5, 0],
+    step(x, y, cx, cy, out) {
+      const wx = x - (x * x - y * y);
+      const wy = y - 2 * x * y;
+      out[0] = cx * wx - cy * wy;
+      out[1] = cx * wy + cy * wx;
+    },
+    glsl: 'vec2 w = z - vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y); return cmul(c, w);',
+  },
+  {
+    key: 'magnet',
+    family: 'mandel',
+    name: 'Magnet',
+    formula: '((z² + c − 1) / (2z + c − 2))²',
+    note: 'From the physics of magnetism. Orbits either escape or come to rest at 1, and the cycles in between ring like small bells.',
+    view: {cx: 1.4, cy: 0, span: 5.2},
+    start: [0, 0],
+    step(x, y, cx, cy, out) {
+      const ax = x * x - y * y + cx - 1;
+      const ay = 2 * x * y + cy;
+      const bx = 2 * x + cx - 2;
+      const by = 2 * y + cy;
+      const inv = 1 / (bx * bx + by * by);
+      const qx = (ax * bx + ay * by) * inv;
+      const qy = (ay * bx - ax * by) * inv;
+      out[0] = qx * qx - qy * qy;
+      out[1] = 2 * qx * qy;
+    },
+    glsl: 'vec2 q = cdiv(vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c - vec2(1.0, 0.0), 2.0 * z + c - vec2(2.0, 0.0)); return vec2(q.x * q.x - q.y * q.y, 2.0 * q.x * q.y);',
+  },
+  {
+    key: 'sine',
+    family: 'mandel',
+    name: 'Sine set',
+    formula: 'c sin z',
+    note: 'A transcendental cousin: infinitely many copies of the same shapes along the real line, each with its own chord.',
+    view: {cx: 0, cy: 0, span: 7},
+    start: [Math.PI / 2, 0],
+    step(x, y, cx, cy, out) {
+      const sx = Math.sin(x) * Math.cosh(y);
+      const sy = Math.cos(x) * Math.sinh(y);
+      out[0] = cx * sx - cy * sy;
+      out[1] = cx * sy + cy * sx;
+    },
+    glsl: 'return cmul(c, vec2(sin(z.x) * cosh(z.y), cos(z.x) * sinh(z.y)));',
+  },
+  {
+    key: 'exp',
+    family: 'mandel',
+    name: 'Exponential set',
+    formula: 'c eᶻ',
+    note: 'Hairs instead of bulbs. The orbits that survive spin around a single point, so most of it plays one clear note.',
+    view: {cx: -1.2, cy: 0, span: 6},
+    start: [0, 0],
+    step(x, y, cx, cy, out) {
+      const e = Math.exp(x);
+      const ex = e * Math.cos(y);
+      const ey = e * Math.sin(y);
+      out[0] = cx * ex - cy * ey;
+      out[1] = cx * ey + cy * ex;
+    },
+    glsl: 'return cmul(c, exp(min(z.x, 80.0)) * vec2(cos(z.y), sin(z.y)));',
+  },
+
   // ---------- the burning ship family ----------
   {
     key: 'burning-ship',
@@ -58,6 +161,59 @@ export const fractals = [
     },
     glsl: 'return vec2(z.x * z.x - z.y * z.y, 2.0 * abs(z.x * z.y)) + c;',
   },
+  {
+    key: 'celtic',
+    family: 'ship',
+    name: 'Celtic',
+    formula: '|Re z²| + i Im z² + c',
+    note: 'The real part folded back on itself. Knotwork shapes, and drones that wobble between two notes.',
+    view: {cx: -0.53, cy: 0, span: 3.2},
+    step(x, y, cx, cy, out) {
+      out[0] = Math.abs(x * x - y * y) + cx;
+      out[1] = 2 * x * y + cy;
+    },
+    glsl: 'return vec2(abs(z.x * z.x - z.y * z.y), 2.0 * z.x * z.y) + c;',
+  },
+  {
+    key: 'buffalo',
+    family: 'ship',
+    name: 'Buffalo',
+    formula: '|Re z²| − i |Im z²| + c',
+    note: 'Both parts folded. A heavy, horned shape whose chaotic edges rumble low.',
+    view: {cx: -0.7, cy: 0.58, span: 2.8},
+    step(x, y, cx, cy, out) {
+      out[0] = Math.abs(x * x - y * y) + cx;
+      out[1] = -2 * Math.abs(x * y) + cy;
+    },
+    glsl: 'return vec2(abs(z.x * z.x - z.y * z.y), -2.0 * abs(z.x * z.y)) + c;',
+  },
+  {
+    key: 'perpendicular',
+    family: 'ship',
+    name: 'Perpendicular ship',
+    formula: '(Re z − i |Im z|)² + c',
+    note: 'The ship turned on its side. Long spines along the real line with buzzing, stable chaos between them.',
+    view: {cx: -0.37, cy: 0, span: 2.5},
+    step(x, y, cx, cy, out) {
+      out[0] = x * x - y * y + cx;
+      out[1] = -2 * x * Math.abs(y) + cy;
+    },
+    glsl: 'return vec2(z.x * z.x - z.y * z.y, -2.0 * z.x * abs(z.y)) + c;',
+  },
+  {
+    key: 'heart',
+    family: 'ship',
+    name: 'Heart',
+    formula: '(|Re z| + i Im z)² + c',
+    note: 'Only the real part is folded, and the main body becomes a heart. Its edges warble like a theremin.',
+    view: {cx: -0.35, cy: 0, span: 2},
+    step(x, y, cx, cy, out) {
+      out[0] = x * x - y * y + cx;
+      out[1] = 2 * Math.abs(x) * y + cy;
+    },
+    glsl: 'return vec2(z.x * z.x - z.y * z.y, 2.0 * abs(z.x) * z.y) + c;',
+  },
+
   // ---------- CodeParade's two inventions ----------
   {
     key: 'feather',
@@ -113,6 +269,19 @@ export const fractals = [
     glsl: 'return vec2(1.0 - c.x * z.x * z.x + z.y, c.y * z.x);',
   },
   {
+    key: 'lozi',
+    family: 'maps',
+    name: 'Lozi map',
+    formula: '(1 − a |x| + y,  b x)',
+    note: 'Hénon with the curve replaced by a corner. Straight edges everywhere, and harsher, square-wave tones.',
+    view: {cx: 0.03, cy: 0, span: 4.8},
+    step(x, y, cx, cy, out) {
+      out[0] = 1 - cx * Math.abs(x) + y;
+      out[1] = cy * x;
+    },
+    glsl: 'return vec2(1.0 - c.x * abs(z.x) + z.y, c.y * z.x);',
+  },
+  {
     key: 'duffing',
     family: 'maps',
     name: 'Duffing map',
@@ -154,6 +323,88 @@ export const fractals = [
       out[1] = ny;
     },
     glsl: 'z.y += c.y * sin(z.x); z.x += c.x * z.y; return z;',
+  },
+  {
+    key: 'tinkerbell',
+    family: 'maps',
+    name: 'Tinkerbell map',
+    formula: '(x² − y² + a x + b y,  2xy + k x + 0.5 y)',
+    note: 'A quadratic map named for the shape of its attractor. Slide k to bend the whole plane of sounds.',
+    view: {cx: 0.04, cy: -0.31, span: 4.9},
+    start: [-0.72, -0.64],
+    param: {name: 'k', min: 0.5, max: 3, step: 0.01, value: 2},
+    step(x, y, cx, cy, out, k) {
+      out[0] = x * x - y * y + cx * x + cy * y;
+      out[1] = 2 * x * y + k * x + 0.5 * y;
+    },
+    glsl: 'return vec2(z.x * z.x - z.y * z.y + c.x * z.x + c.y * z.y, 2.0 * z.x * z.y + uP * z.x + 0.5 * z.y);',
+  },
+  {
+    key: 'bogdanov',
+    family: 'maps',
+    name: 'Bogdanov map',
+    formula: 'y += e y + a x (x − 1) + b x y,  x += y',
+    note: 'A map that sits right at a bifurcation, where a still point gives birth to a loop. Slow, rising, siren-like tones.',
+    view: {cx: 0.3, cy: -0.6, span: 5},
+    shadeInside: true,
+    start: [0.1, 0.05],
+    param: {name: 'damping e', min: -0.05, max: 0.05, step: 0.0005, value: 0},
+    step(x, y, cx, cy, out, k) {
+      const ny = y + k * y + cx * x * (x - 1) + cy * x * y;
+      out[0] = x + ny;
+      out[1] = ny;
+    },
+    glsl: 'float ny = z.y + uP * z.y + c.x * z.x * (z.x - 1.0) + c.y * z.x * z.y; return vec2(z.x + ny, ny);',
+  },
+  {
+    key: 'gingerbread',
+    family: 'maps',
+    name: 'Gingerbread man',
+    formula: '(1 − y + a |x|,  x)',
+    note: 'No constant at all: every point is just a different start. Hexagons that play steady chords, inside a sea of chaos.',
+    view: {cx: 3, cy: 3, span: 30},
+    shadeInside: true,
+    noJulia: true,
+    param: {name: 'a', min: 0.5, max: 1.5, step: 0.001, value: 1},
+    step(x, y, cx, cy, out, k) {
+      out[0] = 1 - y + k * Math.abs(x);
+      out[1] = x;
+    },
+    glsl: 'return vec2(1.0 - z.y + uP * abs(z.x), z.x);',
+  },
+
+  // ---------- strange attractors ----------
+  {
+    key: 'clifford',
+    family: 'attractors',
+    name: 'Clifford attractor',
+    formula: '(sin a y + k cos a x,  sin b x + k cos b y)',
+    note: 'Every point is a different attractor, and none of them escape. The texture of each one is its sound.',
+    view: {cx: 0, cy: 0, span: 6},
+    start: [0.1, 0.1],
+    bounded: true,
+    param: {name: 'k', min: 0, max: 2, step: 0.01, value: 1},
+    step(x, y, cx, cy, out, k) {
+      out[0] = Math.sin(cx * y) + k * Math.cos(cx * x);
+      out[1] = Math.sin(cy * x) + k * Math.cos(cy * y);
+    },
+    glsl: 'return vec2(sin(c.x * z.y) + uP * cos(c.x * z.x), sin(c.y * z.x) + uP * cos(c.y * z.y));',
+  },
+  {
+    key: 'dejong',
+    family: 'attractors',
+    name: 'De Jong attractor',
+    formula: '(sin a y − cos b x,  sin k x − cos k y)',
+    note: 'Peter de Jong\'s trigonometric attractor. Wide bands of hiss with sudden islands of pitch.',
+    view: {cx: 0, cy: 0, span: 6},
+    start: [0.1, 0.1],
+    bounded: true,
+    param: {name: 'k', min: -3, max: 3, step: 0.01, value: 1.9},
+    step(x, y, cx, cy, out, k) {
+      out[0] = Math.sin(cx * y) - Math.cos(cy * x);
+      out[1] = Math.sin(k * x) - Math.cos(k * y);
+    },
+    glsl: 'return vec2(sin(c.x * z.y) - cos(c.y * z.x), sin(uP * z.x) - cos(uP * z.y));',
   },
 ];
 
