@@ -372,6 +372,7 @@ const showReadout = () => {
   const [x, y] = state.point;
   $('#r-point').textContent = `${state.julia ? 'z₀' : 'c'} = ${fmt(x)}, ${fmt(y)}`;
   const info = state.info;
+  el.classList.toggle('escaped', info.kind === 'escape');
   if (info.kind === 'escape') {
     $('#r-what').textContent = `Escapes after ${info.steps.toLocaleString('en')} steps`;
     $('#r-note').textContent = 'a click, then silence';
@@ -526,7 +527,8 @@ const drawState = (full = false) => ({
 
 // overlay colours live here, not in CSS variables, so the path never falls back to black if the stylesheet changes
 const ink = {
-  blue: '#5ab4dc', // the orbit path and the pressed point
+  blue: '#5ab4dc', // an orbit that stays: a note or chaos
+  red: '#e0606f', // an orbit that escapes: a click, then silence
   paper: '#f7f1e9',
   stone: '#a29c98',
   ground: '#130b07',
@@ -594,13 +596,14 @@ const drawOverlay = (now) => {
   ctx2d.stroke();
   ctx2d.globalAlpha = fade;
   ctx2d.lineWidth = 2;
-  ctx2d.strokeStyle = ink.blue;
+  const escapes = state.info?.kind === 'escape';
+  ctx2d.strokeStyle = escapes ? ink.red : ink.blue;
   path();
   ctx2d.stroke();
   ctx2d.globalAlpha = 1;
   const [px, py] = toScreen(state.point[0], state.point[1]);
   ring(px, py, 14, ink.stone, 0.75);
-  dot(px, py, 3.5, ink.blue);
+  dot(px, py, 3.5, escapes ? ink.red : ink.blue);
 };
 
 const tick = (now) => {
