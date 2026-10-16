@@ -524,12 +524,12 @@ const drawState = (full = false) => ({
   colour: state.colour,
 });
 
-const css = getComputedStyle(document.documentElement);
+// overlay colours live here, not in CSS variables, so the path never falls back to black if the stylesheet changes
 const ink = {
-  blue: css.getPropertyValue('--blue').trim(),
-  paper: css.getPropertyValue('--paper').trim(),
-  stone: css.getPropertyValue('--stone-light').trim(),
-  ground: css.getPropertyValue('--ink').trim(),
+  blue: '#5ab4dc', // the orbit path and the pressed point
+  paper: '#f7f1e9',
+  stone: '#a29c98',
+  ground: '#130b07',
 };
 
 const ring = (x, y, r, col, a) => {
