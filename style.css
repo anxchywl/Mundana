@@ -259,7 +259,7 @@ body.sheet-open #stage {
   transition: opacity 0.2s, transform 0.2s;
 }
 .readout[hidden] {
-  display: block;
+  display: flex;
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
@@ -292,7 +292,7 @@ body.sheet-open #stage {
   color: var(--paper-3);
   font-variant-numeric: tabular-nums;
 }
-.readout:not([hidden]) {
+.readout {
   display: flex;
   align-items: center;
   gap: 16px;
