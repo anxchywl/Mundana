@@ -70,9 +70,11 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 | [`src/synth-worklet.js`](src/synth-worklet.js) | Runs the instrument on the browser's audio thread |
 | [`src/main.js`](src/main.js) | Everything you touch: zoom, gallery, random, saving and links |
 | [`src/spots.js`](src/spots.js) | Points known to sound good, found by [`tools/find-spots.mjs`](tools/find-spots.mjs) |
+| [`src/cantus/points.js`](src/cantus/points.js) | Loads the point library: stable points for every note of every fractal, built by [`tools/build-points.mjs`](tools/build-points.mjs) |
 
 Want to add a fractal? Add it to `src/fractals.js` with both formulas, then run `node tools/find-spots.mjs` and copy
-its spots into `src/spots.js`.
+its spots into `src/spots.js`. After any change to a formula or to `src/voice.js`, run `node tools/build-points.mjs`
+to rebuild the point library; the tests say when it is out of date.
 
 ## Privacy and safety
 
