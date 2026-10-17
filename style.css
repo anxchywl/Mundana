@@ -217,6 +217,26 @@ body.sheet-open #stage {
   color: var(--paper);
   transform: translateY(2px);
 }
+/* a new fractal's name and formula fade in while the picture morphs */
+.info.fresh .title,
+.info.fresh .formula,
+.info.fresh .note,
+.info.fresh .param {
+  animation: fresh 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.info.fresh .formula {
+  animation-delay: 0.06s;
+}
+.info.fresh .note,
+.info.fresh .param {
+  animation-delay: 0.12s;
+}
+@keyframes fresh {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
 .formula {
   margin: 10px 0 0;
   text-align: center;
@@ -385,7 +405,7 @@ body.sheet-open #stage {
 }
 .random.spinning .ring {
   opacity: 0.9;
-  animation: turn 1.3s cubic-bezier(0.65, 0, 0.35, 1);
+  animation: turn 1.7s cubic-bezier(0.45, 0, 0.55, 1);
 }
 @keyframes turn {
   to {

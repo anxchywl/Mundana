@@ -46,6 +46,8 @@ uniform float uK;
 uniform vec3 cGround, cInside, cLine, cBand, cBlue, cPaper;
 
 const float ESCAPE = 1000.0;
+// shading is scaled to a fixed depth, not to this frame's step count, so quick frames and full frames look alike
+const float DEPTH = 1000.0;
 
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
 vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }
@@ -132,13 +134,13 @@ vec3 shade(vec2 frag, int julia) {
   float line = d >= 1.0 ? 1.0 : 0.0;
   float dense = smoothstep(1.0, 2.5, d);
   float a = mix(line * 0.5, 0.08, dense);
-  float lift = smoothstep(0.0, 1.0, log(float(n) + 1.0) / log(float(uIters) + 1.0) * 1.6);
+  float lift = smoothstep(0.0, 1.0, log(float(n) + 1.0) / log(DEPTH + 1.0) * 1.6);
   float strength = colour ? 0.45 : 1.0;
   vec3 col = mix(cGround, cBand, 0.2 * lift * strength);
   bool edge = nr >= uIters || nu >= uIters;
   // the set's edge is one crisp line where the outside escapes quickly, and fades where bounded and slow-escaping
   // points are mixed at pixel scale (the feather's streaks), which would otherwise be a wall of edges
-  float edgeA = 0.85 * (1.0 - smoothstep(0.03, 0.3, float(n) / float(uIters)));
+  float edgeA = 0.85 * (1.0 - smoothstep(0.03, 0.3, float(n) / DEPTH));
   return mix(col, cLine, (edge ? max(edgeA, a) : a) * strength);
 }
 
@@ -305,7 +307,12 @@ export class Renderer {
     gl.uniform1i(loc.uColor, s.colour);
     gl.uniform2f(loc.uJulia, s.julia ? s.julia[0] : 0, s.julia ? s.julia[1] : 0);
     gl.uniform1f(loc.uK, this.k);
-    if (frame === 0) {
+    if (s.alpha !== undefined) {
+      // a crossfade step: blend a whole new frame over what is there
+      gl.enable(gl.BLEND);
+      gl.uniform2f(loc.uJitter, 0, 0);
+      gl.uniform1f(loc.uAlpha, s.alpha);
+    } else if (frame === 0) {
       gl.disable(gl.BLEND);
       gl.uniform2f(loc.uJitter, 0, 0);
       gl.uniform1f(loc.uAlpha, 1);

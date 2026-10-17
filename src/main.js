@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ} from './fractals.js?v=2';
-import {spots} from './spots.js?v=2';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=2';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ} from './fractals.js?v=4';
+import {spots} from './spots.js?v=4';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=4';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -10,6 +10,9 @@ const overlay = $('#overlay');
 const ctx2d = overlay.getContext('2d');
 
 const ITERS_MOVING = 220;
+// a morph steps two formulas at once, so it gets its own budget, lowered on a device that cannot keep up
+const MORPH_ITERS = 420;
+let morphIters = MORPH_ITERS;
 // float32 runs out of digits below this span, see renderer.js
 const MIN_SPAN = 6e-5;
 const MAX_SPAN = 60;
@@ -39,7 +42,7 @@ const state = {
 };
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const MORPH_MS = reducedMotion ? 0 : 1300;
+const MORPH_MS = reducedMotion ? 0 : 1700;
 const desktop = () => window.matchMedia('(min-width: 761px)').matches;
 
 const cur = () => fractals[state.type];
@@ -105,7 +108,7 @@ const panBy = (dxPx, dyPx) => {
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=2', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=4', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -210,9 +213,19 @@ const setFractal = (i, keepView = false, morph = true) => {
   const next = (i + fractals.length) % fractals.length;
   // morph from what is on screen now; a switch during a switch starts from the fractal it was heading to
   if (morph && MORPH_MS > 0 && next !== state.type && !keepView) {
-    state.morph = {from: state.type, fromParam: kOf(), t0: performance.now(), viewFrom: {...state.view}};
+    state.morph = {from: state.type, fromParam: kOf(), t0: 0, viewFrom: {...state.view}};
   }
   state.type = next;
+  if (state.morph) {
+    // compile the blended program first, so its cost is not taken out of the animation
+    try {
+      renderer.program(fractals[state.morph.from], cur());
+    } catch {
+      state.morph = null;
+    }
+    if (state.morph) state.morph.t0 = performance.now();
+    morphIters = MORPH_ITERS;
+  }
   state.julia = null;
   state.picking = false;
   if (!keepView) {
@@ -602,8 +615,13 @@ const toggleGallery = (open = !galleryOpen()) => {
 
 let last = performance.now();
 let lastKey = '';
+let landed = false;
+// after a morph, the full-depth picture crossfades in over this many frames, ending fully replaced
+const LAND_STEPS = 12;
+let landStep = 0;
 
-const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+// a sine ease: it leaves and lands softly, and never rushes through the middle
+const easeInOut = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
 
 const drawState = (full = false) => ({
   // while morphing, the picture is the old fractal's formula blending into the new one's
@@ -613,7 +631,7 @@ const drawState = (full = false) => ({
   cy: state.view.cy,
   span: state.view.span,
   param: state.morph ? state.morph.fromParam : kOf(),
-  iters: !full && frame === 0 && settling ? Math.min(ITERS_MOVING, state.iters) : state.iters,
+  iters: state.morph ? Math.min(morphIters, state.iters) : !full && frame === 0 && settling ? Math.min(ITERS_MOVING, state.iters) : state.iters,
   drawM: !state.julia || state.picking,
   drawJ: !!state.julia,
   julia: state.julia,
@@ -718,6 +736,8 @@ const tick = (now) => {
     // the formula and the view travel together, on one eased clock
     const m = state.morph;
     const t = Math.min(1, (now - m.t0) / MORPH_MS);
+    // a slow frame means the GPU is behind: draw the rest of the morph with fewer steps
+    if (now - m.t0 > 120 && dt > 0.034 && morphIters > 160) morphIters = Math.round(morphIters * 0.75);
     m.e = easeInOut(t);
     const a = m.viewFrom;
     v.cx = a.cx + (d.cx - a.cx) * m.e;
@@ -726,12 +746,20 @@ const tick = (now) => {
     if (t >= 1) {
       state.morph = null;
       Object.assign(v, d);
+      landed = true;
     }
   }
 
   const key = JSON.stringify([v, state.type, kOf(), state.morph?.e, state.julia, state.picking, state.colour, state.iters, W, H]);
-  if (key !== lastKey) {
+  if (key !== lastKey && landed) {
+    // a morph just landed: the full-depth picture blends in over its last frame instead of cutting to it
     lastKey = key;
+    landed = false;
+    settling = false;
+    landStep = 1;
+  } else if (key !== lastKey) {
+    lastKey = key;
+    landStep = 0;
     frame = 0;
     settling = true;
   } else if (settling) {
@@ -739,7 +767,18 @@ const tick = (now) => {
     settling = false;
     frame = 0;
   }
-  if (frame < MAX_FRAMES) {
+  if (landStep > 0) {
+    // step k of n blends at 1 / (n - k + 1), so the old frame's share falls evenly to nothing
+    try {
+      renderer.draw({...drawState(), alpha: 1 / (LAND_STEPS - landStep + 1)}, 0);
+    } catch {
+      landStep = LAND_STEPS;
+    }
+    if (++landStep > LAND_STEPS) {
+      landStep = 0;
+      frame = 1;
+    }
+  } else if (frame < MAX_FRAMES) {
     try {
       renderer.draw(drawState(), frame);
     } catch (err) {
@@ -1098,8 +1137,16 @@ const fitAll = () => $$('.fit').forEach(fitLine);
 document.fonts?.ready.then(fitAll);
 window.addEventListener('resize', fitAll);
 
+let shownName = '';
 const syncUI = () => {
   const f = cur();
+  if (shownName && shownName !== f.name) {
+    const card = $('.info');
+    card.classList.remove('fresh');
+    void card.offsetWidth;
+    card.classList.add('fresh');
+  }
+  shownName = f.name;
   $$('.f-name').forEach((el) => (el.textContent = f.name));
   $$('.f-formula').forEach((el) => (el.textContent = f.formula));
   $$('.f-note').forEach((el) => (el.textContent = f.note));
