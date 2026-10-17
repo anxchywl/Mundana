@@ -45,7 +45,7 @@ uniform float uAlpha;
 uniform float uK;
 uniform vec3 cGround, cInside, cLine, cBand, cBlue, cPaper;
 
-const float ESCAPE = 1000.0;
+const float ESCAPE = 10000.0;
 // shading is scaled to a fixed depth, not to this frame's step count, so quick frames and full frames look alike
 const float DEPTH = 1000.0;
 
@@ -58,20 +58,24 @@ vec2 ccube(vec2 a) {
 
 ${stepCode(a, b)}
 
-// count of steps to escape (uIters if it never does); sums describe the shape of a bounded orbit
-int run(vec2 z, vec2 c, out vec3 sumz) {
-  vec2 pz = z;
-  sumz = vec3(0.0);
+// count of steps to escape (uIters if it never does). For an orbit that stays, shape describes how it moves:
+// x its mean step length, y its mean turning (1 carries straight on, -1 doubles straight back), z its mean reach
+int run(vec2 z, vec2 c, out vec3 shape) {
+  vec2 d0 = vec2(0.0);
+  shape = vec3(0.0);
   for (int i = 0; i < 20000; i++) {
-    if (i >= uIters) return uIters;
-    vec2 ppz = pz;
-    pz = z;
-    z = mapStep(z, c);
-    if (dot(z, z) > ESCAPE) return i;
-    sumz.x += dot(z - pz, pz - ppz);
-    sumz.y += dot(z - pz, z - pz);
-    sumz.z += dot(z - ppz, z - ppz);
+    if (i >= uIters) break;
+    vec2 next = mapStep(z, c);
+    if (dot(next, next) > ESCAPE) return i;
+    vec2 d1 = next - z;
+    float len = length(d1);
+    shape.x += len;
+    shape.y += dot(d0, d1) / (length(d0) * len + 1e-12);
+    shape.z += length(next);
+    d0 = d1;
+    z = next;
   }
+  shape /= float(uIters);
   return uIters;
 }
 
@@ -107,21 +111,22 @@ vec3 shade(vec2 frag, int julia) {
   bool colour = mode == 1;
   if (n >= uIters) {
     if (mode == 0) return cInside;
-    vec3 s = abs(sumz) / float(uIters);
-    vec3 k = sin(abs(s * 5.0)) * 0.45 + 0.5;
-    // vivid: the original program's colours, the three orbit measures used directly as red, green and blue
-    if (mode == 2) return k;
-    // the orbit's shape as an engraved tone: brightness from its step size, a cool teal cast where it turns back
-    // on itself. One accent only, kept muted, so it stays a print and never turns iridescent
-    vec3 base = mix(cInside, cBand, smoothstep(0.05, 0.95, k.y));
-    base = mix(base, cPaper, 0.35 * smoothstep(0.5, 0.95, k.y * k.z));
-    float b = smoothstep(0.5, 0.95, k.x) * 0.45;
-    return mix(base, cBlue * (0.7 + 0.5 * k.y), b);
+    float stride = 1.0 - exp(-2.5 * sumz.x); // 0 for a still point, towards 1 for big leaps
+    float turn = 0.5 - 0.5 * sumz.y; // 0 carries on, 1 doubles back, as a period 2 orbit does
+    float reach = 1.0 - exp(-0.6 * sumz.z);
+    if (mode == 2) {
+      // vivid: a cosine palette whose hue follows how the orbit turns and how far it strides
+      vec3 hue = 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + 0.85 * turn + 0.45 * stride));
+      return hue * (0.3 + 0.7 * mix(stride, 1.0, 0.4)) * (0.6 + 0.4 * reach);
+    }
+    // tones: brightness from the stride, a blue cast where the orbit doubles back
+    vec3 base = mix(cInside, cBand, stride);
+    base = mix(base, cPaper, 0.3 * stride * reach);
+    return mix(base, cBlue * (0.7 + 0.5 * stride), 0.55 * smoothstep(0.35, 1.0, turn) * stride);
   }
   if (mode == 2) {
-    // the original's dim blue escape bands, so the coloured inside carries the picture
-    float fi = float(n);
-    return vec3(sin(fi * 0.1) * 0.5 + 0.5, cos(fi * 0.1) * 0.5 + 0.5, 1.0) * 0.15;
+    // dim bands outside, so the coloured inside carries the picture
+    return (0.5 + 0.5 * cos(6.28318 * (vec3(0.6, 0.7, 0.8) + float(n) * 0.04))) * 0.12;
   }
   // outside: the contour map. Neighbours one output pixel away tell us whether a count line passes here
   float px = uSpan / min(uRes.x, uRes.y) * uK;
@@ -139,7 +144,7 @@ vec3 shade(vec2 frag, int julia) {
   vec3 col = mix(cGround, cBand, 0.2 * lift * strength);
   bool edge = nr >= uIters || nu >= uIters;
   // the set's edge is one crisp line where the outside escapes quickly, and fades where bounded and slow-escaping
-  // points are mixed at pixel scale (the feather's streaks), which would otherwise be a wall of edges
+  // points are mixed at pixel scale (fine streaks of a slow-escaping map), which would otherwise be a wall of edges
   float edgeA = 0.85 * (1.0 - smoothstep(0.03, 0.3, float(n) / DEPTH));
   return mix(col, cLine, (edge ? max(edgeA, a) : a) * strength);
 }
@@ -165,8 +170,8 @@ const rgb = (hex) => {
 
 // the palette: ink, paper, stone and one blue
 const PALETTE = {
-  cGround: rgb('#130B07'),
-  cInside: rgb('#2A221D'),
+  cGround: rgb('#0B0B0C'),
+  cInside: rgb('#222225'),
   cLine: rgb('#F7F1E9'),
   cBand: rgb('#817C7A'),
   cBlue: rgb('#3E7C8F'),

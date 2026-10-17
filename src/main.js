@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ} from './fractals.js?v=4';
-import {spots} from './spots.js?v=4';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=4';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=22';
+import {spots} from './spots.js?v=22';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=22';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -25,11 +25,12 @@ const state = {
   params: {}, // slider values the user has moved, by fractal key
   julia: null, // the fixed c of a Julia set, or null for the fractal itself
   picking: false, // choosing c for a Julia set: both pictures are drawn, blended
-  colour: 0, // 0 plain engraving, 1 muted orbit tones, 2 vivid: the original program's colours
+  colour: 0, // 0 plain engraving, 1 muted orbit tones, 2 vivid colours
   sustain: false, // dampening on by default, so notes ring and fade like an instrument
-  animate: false, // the drawn path walks forward with the sound, as in the original
+  animate: false, // slow motion: the path is replayed a step at a time
+  traceStart: 0,
+  traceHold: 0,
   point: null, // where the user last played, in plane units
-  orbit: null, // where an animated path currently starts
   playing: false,
   playedAt: 0,
   info: null,
@@ -108,7 +109,7 @@ const panBy = (dxPx, dyPx) => {
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=4', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=22', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -184,7 +185,8 @@ const analyseSoon = () => {
 const play = (x, y) => {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   state.point = [x, y];
-  state.orbit = [x, y];
+  state.traceStart = performance.now();
+  state.traceHold = 0;
   state.playing = true;
   state.playedAt = performance.now();
   send({type: 'point', p: [x, y]});
@@ -200,7 +202,6 @@ const play = (x, y) => {
 const stop = () => {
   state.playing = false;
   state.point = null;
-  state.orbit = null;
   state.info = null;
   send({type: 'stop'});
   showReadout();
@@ -421,10 +422,23 @@ const copyLink = async () => {
 };
 
 let toastTimer = 0;
-const hideToast = () => $('#toast').classList.remove('show');
+const hideToast = () => {
+  $('#toast').classList.remove('show');
+  document.body.classList.remove('toasting');
+};
 const toast = (msg) => {
   const t = $('#toast');
   t.textContent = msg;
+  // on a phone the message takes the name card's exact place while the card steps aside
+  if (!desktop()) {
+    const r = $('.info').getBoundingClientRect();
+    t.style.top = `${r.top}px`;
+    t.style.minHeight = `${r.height}px`;
+    document.body.classList.add('toasting');
+  } else {
+    t.style.top = '';
+    t.style.minHeight = '';
+  }
   t.classList.add('show');
   clearTimeout(toastTimer);
   // longer messages stay up longer
@@ -459,17 +473,19 @@ const showReadout = () => {
     $('#r-note').textContent = 'a click, then silence';
   } else if (info.kind === 'cycle' && info.period === 1) {
     $('#r-what').textContent = 'Period 1';
-    $('#r-note').textContent = 'a fixed point, so no pitch';
+    $('#r-note').textContent = 'a still point, no pitch';
   } else if (info.kind === 'cycle') {
     const p = pitchOf(info.period);
     $('#r-what').textContent = `Period ${info.period}`;
-    $('#r-note').textContent = p.hz >= 20 ? `${p.hz.toFixed(p.hz < 100 ? 1 : 0)} Hz, ${p.name}${p.cents}` : `${p.hz.toFixed(2)} Hz, a rhythm rather than a pitch`;
+    $('#r-note').textContent = p.hz >= 20 ? `${p.hz.toFixed(p.hz < 100 ? 1 : 0)} Hz, ${p.name}${p.cents}` : `${p.hz.toFixed(2)} Hz, a rhythm`;
   } else {
     $('#r-what').textContent = 'Chaos';
-    $('#r-note').textContent = 'no repeating cycle, so noise instead of a note';
+    $('#r-note').textContent = 'noise, no steady note';
   }
-  fitLine($('#r-what'));
-  fitLine($('#r-note'));
+  if (desktop()) fitLine($('#r-what'));
+  else $('#r-what').style.fontSize = '';
+  if (desktop()) fitLine($('#r-note'));
+  else $('#r-note').style.fontSize = '';
 };
 
 // ---------- the side panel: slider and spots ----------
@@ -506,14 +522,23 @@ const pick = (i) => {
   toggleGallery(false);
 };
 
-// compile the morph program while the pointer is still on its way, so the switch starts without a stutter
+// prepare the morph program for a card the pointer rests on, while the browser is idle, so picking it starts without
+// a stutter and moving across the grid never freezes the page
+let warmTimer = 0;
 const warm = (i) => {
+  clearTimeout(warmTimer);
   if (i === state.type) return;
-  try {
-    renderer.program(cur(), fractals[i]);
-  } catch {
-    // a failed compile shows up properly when the switch itself draws
-  }
+  warmTimer = setTimeout(() => {
+    const go = () => {
+      try {
+        renderer.program(cur(), fractals[i]);
+      } catch {
+        // a failed compile shows up properly when the switch itself draws
+      }
+    };
+    if (window.requestIdleCallback) requestIdleCallback(go, {timeout: 500});
+    else go();
+  }, 180);
 };
 
 const buildGallery = () => {
@@ -644,7 +669,7 @@ const ink = {
   red: '#e0606f', // an orbit that escapes: a click, then silence
   paper: '#f7f1e9',
   stone: '#a29c98',
-  ground: '#130b07',
+  ground: '#0b0b0c',
 };
 
 const ring = (x, y, r, col, a) => {
@@ -679,9 +704,8 @@ const drawOverlay = (now) => {
   const k = kOf();
   const {z0, c} = orbitOf(f, state.point, state.julia);
   const out = [0, 0];
-  // the path from where the orbit starts, so the spiral into its cycle (the star) stays on screen. Animated, it
-  // starts where the sound has got to instead, and only the cycle the orbit settled into is left
-  let [x, y] = state.animate && state.orbit ? state.orbit : z0;
+  // the path from where the orbit starts, so the spiral into its cycle (the star) stays on screen
+  let [x, y] = z0;
   // with dampening on, the drawn orbit dims as the note dies, but never so far that it cannot be read
   const age = (now - state.playedAt) / 1000;
   const fade = !state.playing || state.sustain ? 1 : Math.max(0.55, Math.pow(0.9992, age * state.rate));
@@ -694,10 +718,29 @@ const drawOverlay = (now) => {
     pts.push([Math.max(-1e4, Math.min(1e4, sx)), Math.max(-1e4, Math.min(1e4, sy))]);
     if (!(x * x + y * y <= ESCAPE_SQ)) break;
   }
-  const path = () => {
+  // slow motion: the orbit replays a step at a time, from about 4 steps a second and speeding up, then pauses and
+  // starts over. You can watch it settle into the cycle you hear, and count its period on the step counter
+  let shown = pts.length - 1;
+  let frac = 0;
+  if (state.animate) {
+    // the frame clock can run a few ms behind the press, so time never goes below zero
+    const t = Math.max(0, (now - state.traceStart) / 1000);
+    const nf = 4 * t + 3 * t * t;
+    const n = Math.floor(nf);
+    frac = nf - n;
+    if (n >= shown) {
+      frac = 0;
+      if (!state.traceHold) state.traceHold = now;
+      else if (now - state.traceHold > 1500) {
+        state.traceStart = now;
+        state.traceHold = 0;
+      }
+    } else shown = n;
+  }
+  const path = (from = 0) => {
     ctx2d.beginPath();
-    ctx2d.moveTo(pts[0][0], pts[0][1]);
-    for (const [px, py] of pts) ctx2d.lineTo(px, py);
+    ctx2d.moveTo(pts[from][0], pts[from][1]);
+    for (let i = from + 1; i <= shown; i++) ctx2d.lineTo(pts[i][0], pts[i][1]);
   };
   ctx2d.lineJoin = 'round';
   ctx2d.lineCap = 'round';
@@ -713,6 +756,25 @@ const drawOverlay = (now) => {
   ctx2d.strokeStyle = escapes ? ink.red : ink.blue;
   path();
   ctx2d.stroke();
+  if (state.animate) {
+    // the hop in progress is drawn bright, and the point glides along it with its step number
+    const [ax, ay] = pts[shown];
+    const [bx, by] = pts[Math.min(shown + 1, pts.length - 1)];
+    const hx = ax + (bx - ax) * frac;
+    const hy = ay + (by - ay) * frac;
+    ctx2d.globalAlpha = 1;
+    ctx2d.lineWidth = 3;
+    ctx2d.strokeStyle = ink.paper;
+    ctx2d.beginPath();
+    ctx2d.moveTo(ax, ay);
+    ctx2d.lineTo(hx, hy);
+    ctx2d.stroke();
+    dot(hx, hy, 5, escapes ? ink.red : ink.blue);
+    ring(hx, hy, 9, ink.paper, 0.8);
+    ctx2d.font = '500 12px Jost, system-ui, sans-serif';
+    ctx2d.fillStyle = ink.paper;
+    ctx2d.fillText(String(shown), hx + 13, hy - 9);
+  }
   ctx2d.globalAlpha = 1;
   const [px, py] = toScreen(state.point[0], state.point[1]);
   ring(px, py, 14, ink.stone, 0.75);
@@ -722,7 +784,7 @@ const drawOverlay = (now) => {
 const tick = (now) => {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  // ease toward the destination, as the original does, frame-rate independent
+  // ease toward the destination, frame-rate independent
   const e = 1 - Math.pow(0.8, dt * 60);
   const v = state.view;
   const d = state.dest;
@@ -793,22 +855,6 @@ const tick = (now) => {
     if (!settling) frame++;
   }
 
-  // an animated path walks forward at the rate the sound plays it
-  if (state.orbit && state.playing && state.animate) {
-    const f = cur();
-    const k = kOf();
-    const {c} = orbitOf(f, state.point, state.julia);
-    const out = [0, 0];
-    let [x, y] = state.orbit;
-    const n = Math.round(state.rate * dt);
-    for (let i = 0; i < n; i++) {
-      f.step(x, y, c[0], c[1], out, k);
-      if (!(out[0] * out[0] + out[1] * out[1] <= ESCAPE_SQ)) break;
-      x = out[0];
-      y = out[1];
-    }
-    state.orbit = [x, y];
-  }
   drawOverlay(now);
   requestAnimationFrame(tick);
 };
@@ -950,7 +996,7 @@ window.addEventListener('keydown', (e) => {
     spaceHeld = true;
     stage.classList.add('panning');
   } else if (k === 'j' && !e.repeat) {
-    // as in the original: hold J and move the mouse to choose c, let go to keep that Julia set; press again to go back
+    // hold J and move the mouse to choose c, let go to keep that Julia set; press again to go back
     if (cur().noJulia) toggleJulia();
     else if (state.julia && !state.picking) toggleJulia();
     else {
@@ -990,7 +1036,8 @@ const toggleSustain = () => {
 
 const toggleAnimate = () => {
   state.animate = !state.animate;
-  if (state.point) state.orbit = [...state.point];
+  state.traceStart = performance.now();
+  state.traceHold = 0;
   syncUI();
 };
 
@@ -1106,9 +1153,10 @@ const inputs = {
     state.volume = v;
     if (audio?.gain) audio.gain.gain.setTargetAtTime(v, audio.ctx.currentTime, 0.02);
   },
+  // the slider is in semitones from the normal rate, so every notch is one piano key
   rate: (v) => {
-    state.rate = v;
-    send({type: 'rate', value: v});
+    state.rate = clampRate(RATE * 2 ** (v / 12));
+    send({type: 'rate', value: state.rate});
       showReadout();
     saveHash();
   },
@@ -1138,13 +1186,18 @@ document.fonts?.ready.then(fitAll);
 window.addEventListener('resize', fitAll);
 
 let shownName = '';
+let booted = false; // the first fractal, from the link or the default, appears without a fade
+let freshTimer = 0;
 const syncUI = () => {
   const f = cur();
-  if (shownName && shownName !== f.name) {
+  if (booted && shownName && shownName !== f.name) {
     const card = $('.info');
     card.classList.remove('fresh');
     void card.offsetWidth;
     card.classList.add('fresh');
+    // the staggered fade lasts under 0.8 s; then the card is left with no animation on it
+    clearTimeout(freshTimer);
+    freshTimer = setTimeout(() => card.classList.remove('fresh'), 900);
   }
   shownName = f.name;
   $$('.f-name').forEach((el) => (el.textContent = f.name));
@@ -1160,9 +1213,11 @@ const syncUI = () => {
     b.classList.toggle('disabled', !!f.noJulia);
   });
   $$('.julia-lbl').forEach((l) => (l.textContent = state.picking ? 'Julia set: choose c' : 'Julia set'));
-  // pitch is shown as a shift from the normal rate, in octaves
-  const oct = Math.log2(state.rate / RATE);
-  $$('.rate-value').forEach((el) => (el.textContent = Math.abs(oct) < 0.02 ? 'normal' : `${oct > 0 ? '+' : '−'}${Math.abs(oct).toFixed(1)} oct`));
+  // pitch reads as a musical shift from normal: whole octaves, or semitones in between
+  const st = Math.round(12 * Math.log2(state.rate / RATE));
+  const sign = st > 0 ? '+' : '−';
+  const shift = st === 0 ? 'normal' : st % 12 === 0 ? `${sign}${Math.abs(st) / 12} oct` : `${sign}${Math.abs(st)} semitones`;
+  $$('.rate-value').forEach((el) => (el.textContent = shift));
   stage.classList.toggle('picking', state.picking);
   showReadout();
 };
@@ -1203,8 +1258,8 @@ const loadHash = () => {
   if (f.param && n('k') !== null) state.params[f.key] = Math.min(f.param.max, Math.max(f.param.min, n('k')));
   const rate = Number(q.get('rate'));
   if (q.has('rate') && Number.isFinite(rate)) {
-    state.rate = Math.min(12000, Math.max(1000, rate));
-    $$('[data-input="rate"]').forEach((o) => (o.value = state.rate));
+    state.rate = clampRate(rate);
+    $$('[data-input="rate"]').forEach((o) => (o.value = Math.round(12 * Math.log2(state.rate / RATE))));
     send({type: 'rate', value: state.rate});
   }
   setFractal(i, false, false);
@@ -1218,7 +1273,6 @@ const loadHash = () => {
   if (n('px') !== null && n('py') !== null) {
     const p = [n('px'), n('py')];
     state.point = p;
-    state.orbit = p;
     const o = orbitOf(f, p, state.julia);
     state.info = analyse(f, o.z0, o.c, kOf());
     state.shared = true;
@@ -1237,6 +1291,7 @@ buildGallery();
 renderParam();
 syncUI();
 const fromLink = loadHash();
+booted = true;
 let welcomed = false;
 try {
   welcomed = localStorage.getItem('fse-welcomed') === '1';

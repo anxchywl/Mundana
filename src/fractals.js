@@ -3,9 +3,8 @@
 // two in step when editing.
 //
 // This module is shared by the page and the audio worklet, so what you see and what you hear are the same numbers.
-// The first eight maps and the synthesis follow CodeParade's Fractal Sound Explorer (MIT); the rest are added here.
 //
-// Conventions, as in the original:
+// Conventions:
 //   - a point of the picture is c. Unless `start` is given, its orbit starts at z0 = c. For the maps in the Mandelbrot
 //     family that is the same orbit as starting at 0, one step later.
 //   - `start` fixes z0 instead (the critical point, for families where it is not 0, or the usual seed of a map),
@@ -14,17 +13,23 @@
 //   - `param` is one extra constant the user can slide. It reaches step() as k and the shader as uP.
 //   - `bounded` maps never escape, so the plain picture would be one flat tone; they are shaded by their orbits.
 //     `shadeInside` does the same for maps that do escape but whose inside is a large, otherwise flat region.
-//   - `normalized` maps are heard as the orbit's direction from c, so far-flung and tight orbits are equally loud.
 
-export const ESCAPE_SQ = 1000;
+/** an orbit that gets further than 100 from the origin counts as escaped */
+export const ESCAPE_SQ = 1e4;
 
-/** Default iteration rate of the orbit, in steps per second. Period p is heard at rate / p hertz. */
-export const RATE = 4000;
+/** Default iteration rate of the orbit, in steps per second. Period p is heard at rate / p hertz, so with 4,400
+ *  steps a second a cycle of period 10 is A4, 440 Hz. */
+export const RATE = 4400;
+
+/** Pitch can move this many semitones down and up from RATE: three octaves down, two up. Lower and the sound breaks
+ *  into separate clicks; higher and the orbit runs too fast for the sample rate to draw it cleanly. */
+export const PITCH_DOWN = 36;
+export const PITCH_UP = 24;
+export const clampRate = (r) => Math.min(RATE * 2 ** (PITCH_UP / 12), Math.max(RATE * 2 ** (-PITCH_DOWN / 12), r));
 
 export const families = [
   {key: 'mandel', short: 'Mandelbrot family', name: 'The Mandelbrot set and its cousins', note: 'Polynomials and their relatives. Their stable regions are cycles, so they play clean notes.'},
   {key: 'ship', short: 'Burning ship', name: 'The burning ship family', note: 'One absolute value breaks the symmetry, and stable chaos appears: growls, breaths, engines.'},
-  {key: 'parade', short: 'Inventions', name: 'Two inventions', note: 'Shapes made up for their sound in the original Fractal Sound Explorer.'},
   {key: 'maps', short: 'Chaotic maps', name: 'Chaotic maps', note: 'Physics and dynamics. Here c holds the two constants of the map, and every point is a different system.'},
   {key: 'attractors', short: 'Attractors', name: 'Strange attractors', note: 'Nothing escapes, so everywhere makes a sound. Noise, buzz and texture.'},
 ];
@@ -38,7 +43,6 @@ export const fractals = [
     formula: 'z² + c',
     note: 'Inside the set every orbit settles into a cycle. Each bulb is a different period, so each bulb is a different note.',
     view: {cx: -0.6, cy: 0, span: 2.6},
-    normalized: true,
     step(x, y, cx, cy, out) {
       out[0] = x * x - y * y + cx;
       out[1] = 2 * x * y + cy;
@@ -52,7 +56,6 @@ export const fractals = [
     formula: 'zᵈ + c',
     note: 'The Mandelbrot set with a different power. Slide d and the bulbs multiply: d − 1 fold symmetry, new periods everywhere.',
     view: {cx: 0, cy: 0, span: 3},
-    normalized: true,
     param: {name: 'power d', min: 2, max: 8, step: 0.01, value: 3},
     step(x, y, cx, cy, out, k) {
       const r = Math.pow(x * x + y * y, k / 2);
@@ -69,12 +72,26 @@ export const fractals = [
     formula: 'z̄² + c',
     note: 'Square the mirror image of z instead. Three corners, and orbits that flip direction every step, so the stereo image swaps sides.',
     view: {cx: -0.3, cy: 0, span: 3},
-    normalized: true,
     step(x, y, cx, cy, out) {
       out[0] = x * x - y * y + cx;
       out[1] = -2 * x * y + cy;
     },
     glsl: 'return vec2(z.x * z.x - z.y * z.y, -2.0 * z.x * z.y) + c;',
+  },
+  {
+    key: 'inverted',
+    family: 'mandel',
+    name: 'Inverted Mandelbrot',
+    formula: 'z² + 1/c',
+    note: 'The Mandelbrot set turned inside out: its outside folds into a teardrop. The big round body now sits around the rim.',
+    view: {cx: 1.6, cy: 0, span: 5.6},
+    start: [0, 0],
+    step(x, y, cx, cy, out) {
+      const m = cx * cx + cy * cy;
+      out[0] = x * x - y * y + cx / m;
+      out[1] = 2 * x * y - cy / m;
+    },
+    glsl: 'return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + vec2(c.x, -c.y) / dot(c, c);',
   },
   {
     key: 'lambda',
@@ -213,45 +230,20 @@ export const fractals = [
     },
     glsl: 'return vec2(z.x * z.x - z.y * z.y, 2.0 * abs(z.x) * z.y) + c;',
   },
-
-  // ---------- CodeParade's two inventions ----------
   {
-    key: 'feather',
-    family: 'parade',
-    name: 'Feather',
-    formula: 'z³ / (1 + z·z) + c',
-    note: 'Clusters everywhere, each with its own note. Zoom in to find the intervals between them, like an endless piano.',
-    view: {cx: 0, cy: 0, span: 3.4},
+    key: 'cubic-ship',
+    family: 'ship',
+    name: 'Cubic ship',
+    formula: '(|Re z| + i |Im z|)³ + c',
+    note: 'The burning ship raised to the third power. Three-way folds, and cycles that buzz like a reed.',
+    view: {cx: -0.14, cy: 0.14, span: 2.6},
     step(x, y, cx, cy, out) {
-      // z³ / (1 + (x², y²)): the denominator squares each part separately, as in the original
-      const x2 = x * x;
-      const y2 = y * y;
-      const d = x2 - y2;
-      const ax = x * (d - y2 - y2);
-      const ay = y * (x2 + x2 + d);
-      const bx = 1 + x2;
-      const by = y2;
-      const inv = 1 / (bx * bx + by * by);
-      out[0] = (ax * bx + ay * by) * inv + cx;
-      out[1] = (ay * bx - ax * by) * inv + cy;
+      const a = Math.abs(x);
+      const b = Math.abs(y);
+      out[0] = a * a * a - 3 * a * b * b + cx;
+      out[1] = 3 * a * a * b - b * b * b + cy;
     },
-    glsl: 'return cdiv(ccube(z), vec2(1.0, 0.0) + z * z) + c;',
-  },
-  {
-    key: 'sfx',
-    family: 'parade',
-    name: 'Sound effects',
-    formula: 'z |z|² − z · (Re c², Im c²)',
-    note: 'Not much to look at, but its orbits have a strange symmetry. Lasers, coins, alarms: try Save sound on the good ones.',
-    view: {cx: 0, cy: 0, span: 3.2},
-    step(x, y, cx, cy, out) {
-      const m = x * x + y * y;
-      const ax = cx * cx;
-      const ay = cy * cy;
-      out[0] = x * m - (x * ax - y * ay);
-      out[1] = y * m - (x * ay + y * ax);
-    },
-    glsl: 'return z * dot(z, z) - cmul(z, c * c);',
+    glsl: 'vec2 w = abs(z); return vec2(w.x * w.x * w.x - 3.0 * w.x * w.y * w.y, 3.0 * w.x * w.x * w.y - w.y * w.y * w.y) + c;',
   },
 
   // ---------- chaotic maps ----------

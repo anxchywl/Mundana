@@ -31,8 +31,8 @@ On a computer you can also use the keyboard: `G` gallery, `X` random, `J` Julia 
 
 ## What's inside
 
-- **24 fractals in five families:** the Mandelbrot set and its cousins, the burning ship family, CodeParade's feather
-  and sound effects fractals, chaotic maps from physics, and strange attractors
+- **24 fractals in four families:** the Mandelbrot set and its cousins, the burning ship family, chaotic maps from
+  physics, and strange attractors
 - **Smooth morphing** between fractals: every frame of the change is a real fractal in between
 - **Julia sets**, three colour styles, and a pitch control
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
@@ -60,31 +60,23 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 |---|---|
 | [`src/fractals.js`](src/fractals.js) | Every fractal's formula, written twice: once for the sound and once for the picture |
 | [`src/renderer.js`](src/renderer.js) | Draws the picture on your graphics card with WebGL2 |
-| [`src/synth-worklet.js`](src/synth-worklet.js) | The instrument: steps the orbit 4,000 times a second and smooths it into a sound wave |
+| [`src/synth-worklet.js`](src/synth-worklet.js) | The instrument: steps the orbit 4,400 times a second and draws a smooth curve through it |
 | [`src/main.js`](src/main.js) | Everything you touch: zoom, gallery, random, saving and links |
 | [`src/spots.js`](src/spots.js) | Points known to sound good, found by [`tools/find-spots.mjs`](tools/find-spots.mjs) |
 
 Want to add a fractal? Add it to `src/fractals.js` with both formulas, then run `node tools/find-spots.mjs` and copy
 its spots into `src/spots.js`.
 
-When you publish a change, raise the `?v=` number on the file links in `index.html` and on the imports in `src/`, so
-browsers fetch the new files instead of an old cached copy.
-
 ## Privacy and safety
 
-- **No accounts, no tracking, no server.** Nothing you do leaves your device. The only outside request is for the
-  fonts, from Google Fonts.
-- **Links are treated as untrusted.** A shared link is only ever read as a fractal name from a fixed list and as
-  numbers within safe limits, so a crafted link cannot run code or break the page.
-- **Locked down by a Content Security Policy:** the page runs only its own scripts.
-- **Built to keep going:** if your graphics card resets, the picture rebuilds itself; bad numbers never reach your
-  speakers; heavy fractals are capped so a slow device stays responsive.
+- **No accounts, no tracking, no server.** Nothing you do leaves your device, apart from loading the fonts.
+- **Shared links are checked** before use, and the page only runs its own scripts.
+- **It recovers by itself** if your graphics card resets, and heavy fractals are capped so slow devices keep up.
 
 Found a way to break it? Please [open an issue](https://github.com/anxchywl/Mundana/issues).
 
 ## Limits
 
-- **Zoom stops at about 1/50,000** of the starting view, because browsers draw in single precision. The sound itself
-  is calculated in full precision.
+- **Zoom stops at about 1/50,000** of the starting view, because browsers draw in single precision.
 - **Older or weak devices** may draw the heavier fractals slowly.
 - **Phones in silent mode** may mute the sound.
