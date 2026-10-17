@@ -439,6 +439,7 @@ const buildGallery = () => {
   for (const fam of families) {
     const sec = document.createElement('section');
     sec.className = 'fam';
+    sec.style.viewTransitionName = `fam-${fam.key}`;
     sec.innerHTML = `<h3>${fam.name}</h3>`;
     const grid = document.createElement('div');
     grid.className = 'cards';
@@ -449,6 +450,7 @@ const buildGallery = () => {
       b.dataset.index = i;
       b.dataset.search = `${f.name} ${f.formula} ${fam.name}`.toLowerCase();
       b.innerHTML = `<span class="thumb"><img alt="" data-key="${f.key}" /></span><span class="cname fit">${f.name}</span><span class="cformula fit">${f.formula}</span>`;
+      b.style.viewTransitionName = `card-${f.key}`;
       b.addEventListener('click', () => pick(i));
       b.addEventListener('pointerenter', () => warm(i));
       grid.appendChild(b);
@@ -459,6 +461,12 @@ const buildGallery = () => {
 };
 
 const filterGallery = (q) => {
+  // where the browser can, the change animates: cards glide to their new places and fade in or out
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.startViewTransition(() => applyFilter(q));
+  } else applyFilter(q);
+};
+const applyFilter = (q) => {
   q = q.trim().toLowerCase();
   for (const c of $$('.card-f')) c.hidden = q !== '' && !c.dataset.search.includes(q);
   for (const f of $$('.fam')) f.hidden = !f.querySelector('.card-f:not([hidden])');

@@ -1103,3 +1103,13 @@ body.sheet-open #stage {
     margin-bottom: 8px;
   }
 }
+
+/* search: cards glide to their new places and fade, instead of snapping (browsers with view transitions) */
+::view-transition-group(*) {
+  animation-duration: 0.38s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0.26s;
+}
