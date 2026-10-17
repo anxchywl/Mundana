@@ -52,6 +52,12 @@ python3 -m http.server 5178
 Then open http://localhost:5178. Opening `index.html` directly as a file will not work, because browsers only allow
 the audio engine on pages served over http or https.
 
+The tests need Node 22 or newer and nothing else:
+
+```bash
+node --test tests/*.test.mjs
+```
+
 ## How it works
 
 Everything happens in your browser, in plain JavaScript with no libraries.
@@ -60,7 +66,8 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 |---|---|
 | [`src/fractals.js`](src/fractals.js) | Every fractal's formula, written twice: once for the sound and once for the picture |
 | [`src/renderer.js`](src/renderer.js) | Draws the picture on your graphics card with WebGL2 |
-| [`src/synth-worklet.js`](src/synth-worklet.js) | The instrument: steps the orbit 4,400 times a second and draws a smooth curve through it |
+| [`src/voice.js`](src/voice.js) | The instrument: steps the orbit 4,400 times a second and draws a smooth curve through it |
+| [`src/synth-worklet.js`](src/synth-worklet.js) | Runs the instrument on the browser's audio thread |
 | [`src/main.js`](src/main.js) | Everything you touch: zoom, gallery, random, saving and links |
 | [`src/spots.js`](src/spots.js) | Points known to sound good, found by [`tools/find-spots.mjs`](tools/find-spots.mjs) |
 
