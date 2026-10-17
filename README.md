@@ -2,7 +2,7 @@
 
 **Hear what fractals sound like.** Press any point of a fractal and listen to it.
 
-**[Open Mundana](https://anxchywl.github.io/Mundana/)** It runs in your browser, nothing to install. Headphones help.
+**[Open Mundana](https://mundana.anxchywl.dev/)** It runs in your browser, nothing to install. Headphones help.
 
 ## What it is
 
