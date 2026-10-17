@@ -196,7 +196,14 @@ body.sheet-open #stage {
   font-weight: 600;
   font-size: 23px;
   line-height: 1.1;
-  text-align: left;
+  white-space: nowrap;
+}
+/* names and formulas stay on one line; main.js shrinks the long ones to fit */
+.fit {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .name svg {
   flex: none;
@@ -857,6 +864,12 @@ body.sheet-open #stage {
 .cname {
   font-weight: 500;
   font-size: 16px;
+}
+.cname,
+.cformula {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cformula {
   font-family: var(--serif);

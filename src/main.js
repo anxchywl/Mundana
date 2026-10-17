@@ -448,7 +448,7 @@ const buildGallery = () => {
       b.className = 'card-f';
       b.dataset.index = i;
       b.dataset.search = `${f.name} ${f.formula} ${fam.name}`.toLowerCase();
-      b.innerHTML = `<span class="thumb"><img alt="" data-key="${f.key}" /></span><span class="cname">${f.name}</span><span class="cformula">${f.formula}</span>`;
+      b.innerHTML = `<span class="thumb"><img alt="" data-key="${f.key}" /></span><span class="cname fit">${f.name}</span><span class="cformula fit">${f.formula}</span>`;
       b.addEventListener('click', () => pick(i));
       b.addEventListener('pointerenter', () => warm(i));
       grid.appendChild(b);
@@ -496,6 +496,7 @@ const galleryOpen = () => $('#gallery').classList.contains('open');
 const toggleGallery = (open = !galleryOpen()) => {
   $('#gallery').classList.toggle('open', open);
   if (!open) return;
+  requestAnimationFrame(fitAll);
   makeThumbs();
   closeSettings();
   $$('.card-f').forEach((c) => c.classList.toggle('on', Number(c.dataset.index) === state.type));
@@ -979,11 +980,26 @@ for (const el of $$('[data-input]')) {
   });
 }
 
+/** one line each: a name or formula that is too wide for its card shrinks until it fits */
+const fitLine = (el) => {
+  el.style.fontSize = '';
+  const base = parseFloat(getComputedStyle(el).fontSize);
+  let size = base;
+  while (el.scrollWidth > el.clientWidth + 0.5 && size > base * 0.62) {
+    size -= 0.5;
+    el.style.fontSize = `${size}px`;
+  }
+};
+const fitAll = () => $$('.fit').forEach(fitLine);
+document.fonts?.ready.then(fitAll);
+window.addEventListener('resize', fitAll);
+
 const syncUI = () => {
   const f = cur();
   $$('.f-name').forEach((el) => (el.textContent = f.name));
   $$('.f-formula').forEach((el) => (el.textContent = f.formula));
   $$('.f-note').forEach((el) => (el.textContent = f.note));
+  fitAll();
   $$('[data-colour]').forEach((b) => b.classList.toggle('on', Number(b.dataset.colour) === state.colour));
   $$('.bar-colour').forEach((el) => (el.textContent = COLOUR_NAMES[state.colour]));
   $$('[data-act="damp"]').forEach((b) => b.classList.toggle('on', !state.sustain));
