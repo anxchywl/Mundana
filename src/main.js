@@ -121,7 +121,7 @@ const startAudio = async () => {
     return;
   }
   if (audioFailed || !window.AudioContext || !window.AudioWorkletNode) {
-    if (!audioFailed) toast('This browser cannot play the sound, but the pictures still work.');
+    if (!audioFailed) toast('Sound is not supported in this browser. The pictures still work.');
     audioFailed = true;
     return;
   }
@@ -153,7 +153,7 @@ const startAudio = async () => {
     ac.close().catch(() => {});
     audio = null;
     pending.length = 0;
-    toast('The sound could not start. Open the page over http or https.');
+    toast('Sound could not start. Open the page over http or https.');
   }
 };
 
@@ -248,7 +248,7 @@ const setJulia = (c) => {
 
 const toggleJulia = () => {
   if (cur().noJulia) {
-    toast(`${cur().name} has no constant to hold, so it has no Julia sets.`);
+    toast(`${cur().name} has no Julia sets.`);
     return;
   }
   if (state.julia && !state.picking) {
@@ -261,7 +261,7 @@ const toggleJulia = () => {
     state.picking = true;
     setJulia(state.point ? [...state.point] : toPlane(W / 2, H / 2));
     stop();
-    toast('Drag across the picture to choose c, then let go.');
+    toast('Drag across the picture to pick a Julia set, then let go.');
   }
   syncUI();
   saveHash();
@@ -320,7 +320,7 @@ const spotName = () => {
 let saving = false;
 const saveSound = async () => {
   if (!state.point) {
-    toast('Press a point first, then save its sound.');
+    toast('Play a point first, then save it.');
     return;
   }
   if (saving) return;
@@ -339,7 +339,7 @@ const saveSound = async () => {
 };
 
 const renderWav = async () => {
-  toast('Rendering the sound …');
+  toast('Saving the sound…');
   const seconds = state.sustain ? 4 : 3;
   const sr = 48000;
   const oc = new OfflineAudioContext(2, sr * seconds, sr);
@@ -356,7 +356,7 @@ const renderWav = async () => {
   let peak = 1e-9;
   for (let i = 0; i < L.length; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
   if (peak < 1e-4) {
-    toast('That point is silent: it escapes or sits still. Try another.');
+    toast('This point is silent. Try one that plays a note.');
     return;
   }
   // normalised to -1 dB, with a short fade at the end so it cuts cleanly
@@ -385,27 +385,30 @@ const renderWav = async () => {
   const url = URL.createObjectURL(new Blob([data], {type: 'audio/wav'}));
   download(url, `${cur().key}-${spotName()}.wav`);
   setTimeout(() => URL.revokeObjectURL(url), 5000);
-  toast('Saved as a WAV file.');
+  toast('Sound saved as a WAV file.');
 };
 
 const copyLink = async () => {
   writeHash();
   try {
     await navigator.clipboard.writeText(location.href);
-    toast('Link copied. It opens this fractal, view and point.');
+    toast('Link copied. It opens exactly this view.');
   } catch {
-    toast('Copy the address bar: it holds this exact view and point.');
+    toast('Copy the address bar to share this view.');
   }
 };
 
 let toastTimer = 0;
+const hideToast = () => $('#toast').classList.remove('show');
 const toast = (msg) => {
   const t = $('#toast');
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  // longer messages stay up longer
+  toastTimer = setTimeout(hideToast, Math.min(5000, 1800 + msg.length * 45));
 };
+$('#toast').addEventListener('click', hideToast);
 
 // ---------- readout ----------
 
