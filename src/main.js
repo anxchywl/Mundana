@@ -305,7 +305,16 @@ const download = (href, name) => {
 const snapshot = () => {
   // a fresh full-depth frame, so the saved image is the sharp one
   renderer.draw(drawState(true), 0);
-  download(glCanvas.toDataURL('image/png'), `${cur().key}-${Date.now()}.png`);
+  // the picture and the orbit path live on two canvases; the saved image has both, at the larger of their sizes
+  const scale = Math.max(1, overlay.width / glCanvas.width);
+  const out = document.createElement('canvas');
+  out.width = Math.round(glCanvas.width * scale);
+  out.height = Math.round(glCanvas.height * scale);
+  const g = out.getContext('2d');
+  g.drawImage(glCanvas, 0, 0, out.width, out.height);
+  drawOverlay(performance.now());
+  g.drawImage(overlay, 0, 0, out.width, out.height);
+  download(out.toDataURL('image/png'), `${cur().key}-${Date.now()}.png`);
   frame = 0;
 };
 

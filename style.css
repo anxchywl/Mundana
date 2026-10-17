@@ -550,9 +550,20 @@ body.sheet-open #stage {
   color: var(--paper-2);
 }
 .about .open a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
   color: var(--blue);
   text-decoration: none;
   white-space: nowrap;
+}
+/* the GitHub mark is a filled shape, unlike the line icons elsewhere */
+.about .open .gh {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+  stroke: none;
 }
 .about .open a:hover {
   text-decoration: underline;
