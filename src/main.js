@@ -503,6 +503,7 @@ const makeThumbs = () => {
 const galleryOpen = () => $('#gallery').classList.contains('open');
 const toggleGallery = (open = !galleryOpen()) => {
   $('#gallery').classList.toggle('open', open);
+  dimForSheets();
   if (!open) return;
   requestAnimationFrame(fitAll);
   makeThumbs();
@@ -875,7 +876,7 @@ const toggleAbout = (open = !$('#about').classList.contains('open')) => {
 };
 // on a phone an open sheet dims the picture behind it
 const dimForSheets = () => {
-  const open = $('#settings').classList.contains('open') || $('#about').classList.contains('open');
+  const open = $('#settings').classList.contains('open') || $('#about').classList.contains('open') || galleryOpen();
   document.body.classList.toggle('sheet-open', open && !desktop());
 };
 const closeSettings = () => {
