@@ -192,6 +192,8 @@ const halton = (i, b) => {
 };
 
 export const MAX_FRAMES = 48;
+// compiled programs kept at once; morphs between many pairs would otherwise pile up in GPU memory
+const MAX_PROGRAMS = 32;
 
 export class Renderer {
   constructor(canvas) {
@@ -199,26 +201,61 @@ export class Renderer {
     const gl = canvas.getContext('webgl2', {alpha: false, antialias: false, preserveDrawingBuffer: true, depth: false});
     if (!gl) throw new Error('This browser has no WebGL2.');
     this.gl = gl;
+    this.k = 1;
+    this.lost = false;
+    this.init();
+    // phones and drivers can drop the GPU context at any time; keep the canvas and rebuild when it comes back
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.lost = true;
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.lost = false;
+      this.init();
+      this.onRestore?.();
+    });
+  }
+
+  /** everything that lives on the GPU, created again after a lost context */
+  init() {
+    const {gl} = this;
     this.vert = compile(gl, gl.VERTEX_SHADER, VERT);
     this.programs = new Map();
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    this.k = 1;
   }
 
   /** the compiled program for one fractal, or for a morph from f to g, built on first use */
   program(f, g = null) {
     const key = g ? `${f.key}>${g.key}` : f.key;
     let p = this.programs.get(key);
-    if (p) return p;
+    if (p) {
+      // most recently used goes to the back of the queue
+      this.programs.delete(key);
+      this.programs.set(key, p);
+      return p;
+    }
     const {gl} = this;
+    if (this.programs.size >= MAX_PROGRAMS) {
+      const [oldKey, old] = this.programs.entries().next().value;
+      gl.deleteProgram(old.prog);
+      this.programs.delete(oldKey);
+    }
     const prog = gl.createProgram();
     gl.attachShader(prog, this.vert);
-    gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, frag(f.glsl, g?.glsl)));
+    const fs = compile(gl, gl.FRAGMENT_SHADER, frag(f.glsl, g?.glsl));
+    gl.attachShader(prog, fs);
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`${key}: ${gl.getProgramInfoLog(prog)}`);
+    // the shader object is not needed once linked
+    gl.detachShader(prog, fs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      const log = gl.getProgramInfoLog(prog);
+      gl.deleteProgram(prog);
+      throw new Error(`${key}: ${log}`);
+    }
     gl.useProgram(prog);
     const loc = {};
     for (const u of UNIFORMS) loc[u] = gl.getUniformLocation(prog, u);
@@ -238,6 +275,7 @@ export class Renderer {
    *  With s.morph = {to, param, t} the picture is the blend from s.fractal toward s.morph.to */
   draw(s, frame) {
     const {gl} = this;
+    if (this.lost || gl.isContextLost()) return;
     const m = s.morph;
     const {prog, loc, attr} = this.program(s.fractal, m?.to);
     gl.useProgram(prog);

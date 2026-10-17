@@ -31,22 +31,25 @@ class OrbitSynth extends AudioWorkletProcessor {
   }
 
   message(m) {
+    if (!m || typeof m !== 'object') return;
     if (m.type === 'fractal') {
+      if (!fractals[m.index]) return;
       this.f = fractals[m.index];
       this.k = m.param ?? 0;
       this.paused = true;
     } else if (m.type === 'param') {
-      this.k = m.value;
+      if (Number.isFinite(m.value)) this.k = m.value;
     } else if (m.type === 'rate') {
-      this.rate = m.value;
+      if (Number.isFinite(m.value)) this.rate = Math.min(12000, Math.max(1000, m.value));
     } else if (m.type === 'julia') {
-      this.julia = m.c;
+      this.julia = Array.isArray(m.c) && m.c.every(Number.isFinite) ? m.c : null;
       this.paused = true;
     } else if (m.type === 'sustain') {
       this.sustain = m.on;
     } else if (m.type === 'stop') {
       this.paused = true;
     } else if (m.type === 'point') {
+      if (!Array.isArray(m.p) || !m.p.every(Number.isFinite)) return;
       const {z0, c} = orbitOf(this.f, m.p, this.julia);
       const [x, y] = z0;
       this.cx = c[0];
@@ -137,6 +140,13 @@ class OrbitSynth extends AudioWorkletProcessor {
         this.attack += 1 / 128;
         l = Math.max(-CLIP, Math.min(CLIP, (t * this.dx + (1 - t) * this.dpx) * g));
         r = Math.max(-CLIP, Math.min(CLIP, (t * this.dy + (1 - t) * this.dpy) * g));
+      }
+      // a NaN would stick in the filters and silence everything after it, so it never gets that far
+      if (!Number.isFinite(l) || !Number.isFinite(r)) {
+        l = r = 0;
+        this.paused = true;
+        this.hpL = {x: 0, y: 0};
+        this.hpR = {x: 0, y: 0};
       }
       L[i] = this.dc(this.hpL, l);
       R[i] = this.dc(this.hpR, r);

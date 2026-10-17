@@ -38,7 +38,8 @@ const state = {
   morph: null, // a switch in progress: {from, fromParam, t0, viewFrom}
 };
 
-const MORPH_MS = 1300;
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MORPH_MS = reducedMotion ? 0 : 1300;
 const desktop = () => window.matchMedia('(min-width: 761px)').matches;
 
 const cur = () => fractals[state.type];
@@ -113,9 +114,15 @@ const setupMessages = () => [
   {type: 'rate', value: state.rate},
 ];
 
+let audioFailed = false;
 const startAudio = async () => {
   if (audio) {
-    if (audio.ctx.state !== 'running') audio.ctx.resume();
+    if (audio.ctx.state !== 'running') audio.ctx.resume().catch(() => {});
+    return;
+  }
+  if (audioFailed || !window.AudioContext || !window.AudioWorkletNode) {
+    if (!audioFailed) toast('This browser cannot play the sound, but the pictures still work.');
+    audioFailed = true;
     return;
   }
   let ac;
@@ -125,32 +132,64 @@ const startAudio = async () => {
     ac = new AudioContext({latencyHint: 'interactive'});
   }
   audio = {ctx: ac, node: null};
-  const gain = ac.createGain();
-  gain.gain.value = state.volume;
-  audio.gain = gain;
-  gain.connect(ac.destination);
-  await ac.audioWorklet.addModule(workletURL);
-  const node = new AudioWorkletNode(ac, 'orbit-synth', {numberOfInputs: 0, outputChannelCount: [2]});
-  node.connect(gain);
-  node.port.onmessage = (e) => {
-    if (e.data.type === 'escaped') state.playing = false;
-  };
-  // only the latest state matters: the queued setup messages are replaced by the current ones, points are kept
-  for (const m of setupMessages()) node.port.postMessage(m);
-  for (const m of pending.splice(0)) if (m.type === 'point' || m.type === 'stop') node.port.postMessage(m);
-  audio.node = node;
-  if (ac.state !== 'running') ac.resume();
+  try {
+    const gain = ac.createGain();
+    gain.gain.value = state.volume;
+    audio.gain = gain;
+    gain.connect(ac.destination);
+    await ac.audioWorklet.addModule(workletURL);
+    const node = new AudioWorkletNode(ac, 'orbit-synth', {numberOfInputs: 0, outputChannelCount: [2]});
+    node.connect(gain);
+    node.port.onmessage = (e) => {
+      if (e.data?.type === 'escaped') state.playing = false;
+    };
+    // only the latest state matters: the queued setup messages are replaced by the current ones, points are kept
+    for (const m of setupMessages()) node.port.postMessage(m);
+    for (const m of pending.splice(0)) if (m.type === 'point' || m.type === 'stop') node.port.postMessage(m);
+    audio.node = node;
+    if (ac.state !== 'running') ac.resume().catch(() => {});
+  } catch {
+    // usually a page opened as a file, where the audio module cannot load
+    ac.close().catch(() => {});
+    audio = null;
+    pending.length = 0;
+    toast('The sound could not start. Open the page over http or https.');
+  }
+};
+
+// a hidden tab keeps no audio thread awake
+document.addEventListener('visibilitychange', () => {
+  if (!audio) return;
+  if (document.hidden) audio.ctx.suspend().catch(() => {});
+  else if (state.playing) audio.ctx.resume().catch(() => {});
+});
+
+// the readout analysis runs up to 8,000 steps, so a fast drag asks for it at most once a frame
+let analyseQueued = false;
+const analyseSoon = () => {
+  if (analyseQueued) return;
+  analyseQueued = true;
+  requestAnimationFrame(() => {
+    analyseQueued = false;
+    if (!state.point) return;
+    const {z0, c} = orbitOf(cur(), state.point, state.julia);
+    state.info = analyse(cur(), z0, c, kOf());
+    showReadout();
+  });
 };
 
 const play = (x, y) => {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   state.point = [x, y];
   state.orbit = [x, y];
   state.playing = true;
   state.playedAt = performance.now();
   send({type: 'point', p: [x, y]});
-  const {z0, c} = orbitOf(cur(), state.point, state.julia);
-  state.info = analyse(cur(), z0, c, kOf());
-  showReadout();
+  if (!state.info) {
+    const {z0, c} = orbitOf(cur(), state.point, state.julia);
+    state.info = analyse(cur(), z0, c, kOf());
+    showReadout();
+  } else analyseSoon();
   $('#hint').classList.add('gone');
   saveHash();
 };
@@ -170,7 +209,7 @@ const stop = () => {
 const setFractal = (i, keepView = false, morph = true) => {
   const next = (i + fractals.length) % fractals.length;
   // morph from what is on screen now; a switch during a switch starts from the fractal it was heading to
-  if (morph && next !== state.type && !keepView) {
+  if (morph && MORPH_MS > 0 && next !== state.type && !keepView) {
     state.morph = {from: state.type, fromParam: kOf(), t0: performance.now(), viewFrom: {...state.view}};
   }
   state.type = next;
@@ -278,11 +317,28 @@ const spotName = () => {
 };
 
 /** render the current point offline with the same worklet, and save it as a 16-bit stereo WAV */
+let saving = false;
 const saveSound = async () => {
   if (!state.point) {
     toast('Press a point first, then save its sound.');
     return;
   }
+  if (saving) return;
+  if (!window.OfflineAudioContext || !window.AudioWorkletNode) {
+    toast('This browser cannot save the sound.');
+    return;
+  }
+  saving = true;
+  try {
+    await renderWav();
+  } catch {
+    toast('The sound could not be saved.');
+  } finally {
+    saving = false;
+  }
+};
+
+const renderWav = async () => {
   toast('Rendering the sound …');
   const seconds = state.sustain ? 4 : 3;
   const sr = 48000;
@@ -440,7 +496,9 @@ const buildGallery = () => {
     const sec = document.createElement('section');
     sec.className = 'fam';
     sec.style.viewTransitionName = `fam-${fam.key}`;
-    sec.innerHTML = `<h3>${fam.name}</h3>`;
+    const h = document.createElement('h3');
+    h.textContent = fam.name;
+    sec.appendChild(h);
     const grid = document.createElement('div');
     grid.className = 'cards';
     fractals.forEach((f, i) => {
@@ -449,7 +507,20 @@ const buildGallery = () => {
       b.className = 'card-f';
       b.dataset.index = i;
       b.dataset.search = `${f.name} ${f.formula} ${fam.name}`.toLowerCase();
-      b.innerHTML = `<span class="thumb"><img alt="" data-key="${f.key}" /></span><span class="cname fit">${f.name}</span><span class="cformula fit">${f.formula}</span>`;
+      // built from text nodes, never from HTML strings
+      const thumb = document.createElement('span');
+      thumb.className = 'thumb';
+      const img = document.createElement('img');
+      img.alt = '';
+      img.dataset.key = f.key;
+      thumb.appendChild(img);
+      const name = document.createElement('span');
+      name.className = 'cname fit';
+      name.textContent = f.name;
+      const formula = document.createElement('span');
+      formula.className = 'cformula fit';
+      formula.textContent = f.formula;
+      b.append(thumb, name, formula);
       b.style.viewTransitionName = `card-${f.key}`;
       b.addEventListener('click', () => pick(i));
       b.addEventListener('pointerenter', () => warm(i));
@@ -655,7 +726,17 @@ const tick = (now) => {
     frame = 0;
   }
   if (frame < MAX_FRAMES) {
-    renderer.draw(drawState(), frame);
+    try {
+      renderer.draw(drawState(), frame);
+    } catch (err) {
+      // a shader that will not compile on this GPU: drop the morph, or step back to the Mandelbrot set
+      console.warn(err);
+      if (state.morph) state.morph = null;
+      else if (state.type !== 0) {
+        toast(`${cur().name} cannot be drawn on this device.`);
+        setFractal(0, false, false);
+      }
+    }
     if (!settling) frame++;
   }
 
@@ -1045,15 +1126,23 @@ const saveHash = () => {
   hashTimer = setTimeout(writeHash, 250);
 };
 
+// a link is untrusted input: it is only ever read as a fractal name from the list and as bounded numbers
+const LIMIT = 1e3;
 const loadHash = () => {
+  if (location.hash.length > 600) return false;
   const q = new URLSearchParams(location.hash.slice(1));
   const i = fractals.findIndex((f) => f.key === q.get('f'));
   if (i < 0) return false;
-  const n = (k) => (q.has(k) && Number.isFinite(Number(q.get(k))) ? Number(q.get(k)) : null);
+  const n = (k) => {
+    if (!q.has(k)) return null;
+    const v = Number(q.get(k));
+    return Number.isFinite(v) && Math.abs(v) <= LIMIT ? v : null;
+  };
   const f = fractals[i];
   if (f.param && n('k') !== null) state.params[f.key] = Math.min(f.param.max, Math.max(f.param.min, n('k')));
-  if (n('rate') !== null) {
-    state.rate = Math.min(12000, Math.max(1000, n('rate')));
+  const rate = Number(q.get('rate'));
+  if (q.has('rate') && Number.isFinite(rate)) {
+    state.rate = Math.min(12000, Math.max(1000, rate));
     $$('[data-input="rate"]').forEach((o) => (o.value = state.rate));
     send({type: 'rate', value: state.rate});
   }
@@ -1080,6 +1169,7 @@ const loadHash = () => {
 
 // ---------- start ----------
 
+renderer.onRestore = () => (frame = 0);
 new ResizeObserver(resize).observe(stage);
 resize();
 buildGallery();
