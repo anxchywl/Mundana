@@ -16,9 +16,12 @@ const LEVEL_S = 0.05; // how quickly the automatic gain follows the orbit
 const ATTACK_S = 0.004;
 const RELEASE_S = 0.015;
 const FADE_S = 0.6; // time for a fading note to fall to about a third
+const VELOCITY_DB = 30; // velocity 0 to 1 spans this many decibels
 
 // Catmull-Rom through four values at t between the second and the third
 const curve = (a, b, c, d, t, t2, t3) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3);
+
+const finitePair = (v) => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite);
 
 export class Voice {
   constructor(sampleRate) {
@@ -44,6 +47,8 @@ export class Voice {
     this.release = 1;
     this.level = 0.05;
     this.hp = [0, 0, 0, 0];
+    this.velocityGain = 1;
+    this.releaseS = RELEASE_S;
     // called when the orbit escapes; the worklet forwards it to the page
     this.onEscape = null;
   }
@@ -67,13 +72,26 @@ export class Voice {
     } else if (m.type === 'stop') {
       this.stop();
     } else if (m.type === 'point') {
-      if (Array.isArray(m.p) && m.p.every(Number.isFinite)) this.start(m.p);
+      if (Array.isArray(m.p) && m.p.every(Number.isFinite)) this.start(m.p, m.opts);
     }
   }
 
-  /** begin a new orbit; while one is already sounding, the new one takes over without a fresh attack */
-  start(point) {
-    const {z0, c} = orbitOf(this.f, point, this.julia);
+  /**
+   * Begin a new orbit; while one is already sounding, the new one takes over without a fresh attack.
+   * opts, all optional: z0 [x, y] starts the orbit there instead of where the fractal starts it (a point on the cycle
+   * sounds its pitch from the first sample), velocity 0 to 1 (1 is full level, 0 is silent), rate in steps a second,
+   * offset in seconds (the note began that long ago, so the envelope starts as it would be by then), and releaseS,
+   * the length of the release for this voice from now on.
+   */
+  start(point, opts) {
+    const o = opts && typeof opts === 'object' ? opts : null;
+    if (o && Number.isFinite(o.rate)) this.rate = clampRate(o.rate);
+    if (o && Number.isFinite(o.releaseS)) this.releaseS = Math.min(2, Math.max(0.001, o.releaseS));
+    const velocity = o && Number.isFinite(o.velocity) ? Math.min(1, Math.max(0, o.velocity)) : 1;
+    this.velocityGain = velocity > 0 ? 10 ** (((velocity - 1) * VELOCITY_DB) / 20) : 0;
+    const orbit = orbitOf(this.f, point, this.julia);
+    const z0 = o && finitePair(o.z0) ? o.z0 : orbit.z0;
+    const c = orbit.c;
     this.c = c;
     const p = this.p;
     p[0] = p[2] = z0[0];
@@ -98,6 +116,11 @@ export class Voice {
     this.decay = 1;
     this.release = 1;
     this.level = 0.05;
+    const offset = o && Number.isFinite(o.offset) && o.offset > 0 ? o.offset : 0;
+    if (offset > 0) {
+      this.attack = Math.min(1, this.attack + offset / ATTACK_S);
+      if (this.fading) this.decay = Math.exp(-offset / FADE_S);
+    }
   }
 
   stop() {
@@ -156,14 +179,15 @@ export class Voice {
         this.attack = Math.min(1, this.attack + 1 / (ATTACK_S * sr));
         if (this.fading) this.decay *= fadeStep;
         if (this.releasing) {
-          this.release -= 1 / (RELEASE_S * sr);
+          this.release -= 1 / (this.releaseS * sr);
           if (this.release <= 0) {
             this.on = false;
             this.releasing = false;
             this.release = 1;
           }
         }
-        const env = this.attack * this.decay * Math.max(0, this.release) * gain;
+        // velocity comes after the automatic level, so a soft note is quieter, not normalised back up
+        const env = this.attack * this.decay * Math.max(0, this.release) * gain * this.velocityGain;
         l = Math.tanh(1.6 * sx * env) * 0.7;
         r = Math.tanh(1.6 * sy * env) * 0.7;
       }
