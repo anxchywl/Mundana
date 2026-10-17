@@ -1050,6 +1050,12 @@ body.sheet-open #stage {
     border-radius: 2px;
     background: var(--surface-3);
   }
+  .snap-corner {
+    position: fixed;
+    z-index: 4;
+    left: var(--gap);
+    bottom: calc(var(--gap) + 14px + env(safe-area-inset-bottom));
+  }
   .set-links {
     display: flex !important;
   }
