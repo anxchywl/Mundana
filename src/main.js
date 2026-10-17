@@ -443,6 +443,8 @@ const showReadout = () => {
     $('#r-what').textContent = 'Chaos';
     $('#r-note').textContent = 'no repeating cycle, so noise instead of a note';
   }
+  fitLine($('#r-what'));
+  fitLine($('#r-note'));
 };
 
 // ---------- the side panel: slider and spots ----------

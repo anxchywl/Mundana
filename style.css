@@ -1017,11 +1017,17 @@ body.sheet-open #stage {
     flex-direction: row-reverse;
     justify-content: space-between;
   }
+  /* the text takes only the room left of the icons, and long lines shrink to fit instead of running under them */
   .r-text {
+    flex: 1;
+    min-width: 0;
     display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    column-gap: 10px;
+    flex-direction: column;
+  }
+  .readout .big,
+  #r-note {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .readout .big {
     font-size: 22px;
@@ -1034,6 +1040,7 @@ body.sheet-open #stage {
     display: none;
   }
   .r-actions {
+    flex: none;
     flex-direction: row;
     gap: 0;
   }
@@ -1144,6 +1151,7 @@ body.sheet-open #stage {
   }
   .set-links {
     display: flex !important;
+    justify-content: flex-end;
   }
   .gallery-sheet h2 {
     font-size: 22px;
