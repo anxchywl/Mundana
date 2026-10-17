@@ -191,6 +191,7 @@ body.sheet-open #stage {
   min-width: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   font-weight: 600;
   font-size: 23px;
@@ -211,12 +212,14 @@ body.sheet-open #stage {
 }
 .formula {
   margin: 10px 0 0;
+  text-align: center;
   font-family: var(--serif);
   font-style: italic;
   font-size: 18px;
 }
 .note {
   margin: 6px 0 0;
+  text-align: center;
   font-size: 15px;
   line-height: 1.45;
   color: var(--paper-2);
