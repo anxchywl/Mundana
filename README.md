@@ -67,6 +67,9 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 Want to add a fractal? Add it to `src/fractals.js` with both formulas, then run `node tools/find-spots.mjs` and copy
 its spots into `src/spots.js`.
 
+When you publish a change, raise the `?v=` number on the file links in `index.html` and on the imports in `src/`, so
+browsers fetch the new files instead of an old cached copy.
+
 ## Privacy and safety
 
 - **No accounts, no tracking, no server.** Nothing you do leaves your device. The only outside request is for the

@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ} from './fractals.js';
-import {spots} from './spots.js';
-import {Renderer, MAX_FRAMES} from './renderer.js';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ} from './fractals.js?v=2';
+import {spots} from './spots.js?v=2';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=2';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -105,7 +105,7 @@ const panBy = (dxPx, dyPx) => {
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=2', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},

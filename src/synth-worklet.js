@@ -3,7 +3,7 @@
 // is heard as a tone of rate / p hertz (RATE by default; the page can change it).
 // A port of the Synth in CodeParade's Fractal Sound Explorer (MIT).
 
-import {fractals, orbitOf, ESCAPE_SQ, RATE} from './fractals.js';
+import {fractals, orbitOf, ESCAPE_SQ, RATE} from './fractals.js?v=2';
 
 const VOLUME = 8000 / 32768;
 const CLIP = 32000 / 32768;
