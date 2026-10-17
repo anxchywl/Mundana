@@ -544,6 +544,19 @@ body.sheet-open #stage {
   font-weight: 500;
   color: var(--paper-2);
 }
+.about .open {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--paper-2);
+}
+.about .open a {
+  color: var(--blue);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.about .open a:hover {
+  text-decoration: underline;
+}
 .about .keys {
   display: grid;
   grid-template-columns: repeat(3, auto);
