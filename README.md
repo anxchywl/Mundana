@@ -32,16 +32,25 @@ On a computer you can also use the keyboard: `G` gallery, `X` random, `J` Julia 
 ## Play a song
 
 Mundana can also play a song. Press the music note button next to the round button (bottom left on a phone) and
-choose a MIDI file. The Mandelbrot set plays its melody: each note is a point whose orbit loops at that pitch, and you
-see each orbit as it sounds. Play, pause, seek and stop from the bar at the bottom. Pressing the picture, switching
-fractal or hiding the tab pauses the song; press play to carry on where it stopped.
+choose a MIDI file. Fractals play every part of it: each note is a point whose orbit loops at that pitch, and you see
+every orbit as it sounds, in blue. The drums are sounds rather than notes: a kick is an orbit that flies away (a click,
+drawn in red), a snare or a hat is a point whose orbit never repeats, brighter for a hat. Play, pause, seek and stop
+from the bar at the bottom. Pressing the picture, switching fractal or hiding the tab pauses the song; press play to
+carry on where it stopped.
 
 The panel lists every track of the file with the part it plays (melody, bass, chords or drums), and you can change
-it. For now only the melody plays, one note at a time, on one fractal with the camera still. The file is read in your
-browser and never leaves your device.
+it. Below that you choose how many voices play at once, and for each part its fractal, the loop length it prefers
+(its period) and whether it plays at all. By default the melody and the chords play on the Mandelbrot set, the bass on
+the Multibrot, and the drums on the fractal on screen. The file is read in your browser and never leaves your device.
 
-Limits: MIDI files up to 4 MB, songs up to 10 minutes and 20,000 notes. Notes shorter than 40 ms are joined to the
-next or dropped, and notes too high or too low move by whole octaves; the panel says how many.
+Voices: the melody always has one to itself. The bass, the chords and the drums share the others, 3 by default and up
+to 5. When a chord needs more voices than are free, it keeps its lowest note, then its top note, its third and its
+seventh; a note that loses its voice to a newer one comes back when a voice is free again. The panel says how many
+notes were left out.
+
+Limits: MIDI files up to 4 MB, songs up to 10 minutes and 20,000 notes, at most 6 voices (4 by default). Notes
+shorter than 40 ms are joined to the next or dropped, and notes too high or too low move by whole octaves; the panel
+says how many. The camera stays still on one fractal for now.
 
 ## What's inside
 
@@ -50,7 +59,7 @@ next or dropped, and notes too high or too low move by whole octaves; the panel 
 - **Smooth morphing** between fractals: every frame of the change is a real fractal in between
 - **Julia sets**, three colour styles, and a pitch control
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
-- **Play a song** from a MIDI file, its melody played by the Mandelbrot set
+- **Play a song** from a MIDI file, melody, chords, bass and drums, on up to six voices at once
 - **Works on phones:** one finger plays, two fingers move and zoom
 
 ## Run it yourself
@@ -83,14 +92,14 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 |---|---|
 | [`src/fractals.js`](src/fractals.js) | Every fractal's formula, written twice: once for the sound and once for the picture |
 | [`src/renderer.js`](src/renderer.js) | Draws the picture on your graphics card with WebGL2 |
-| [`src/voice.js`](src/voice.js) | The instrument: steps the orbit 4,400 times a second and draws a smooth curve through it |
-| [`src/synth-worklet.js`](src/synth-worklet.js) | Runs the instrument on the browser's audio thread |
+| [`src/voice.js`](src/voice.js) | The instrument: steps the orbit 4,400 times a second and draws a smooth curve through it, and the master path the voices are mixed through |
+| [`src/synth-worklet.js`](src/synth-worklet.js) | Runs up to six voices on the browser's audio thread, each note starting on its exact sample |
 | [`src/main.js`](src/main.js) | Everything you touch: zoom, gallery, random, saving and links |
 | [`src/spots.js`](src/spots.js) | Points known to sound good, found by [`tools/find-spots.mjs`](tools/find-spots.mjs) |
 | [`src/cantus/points.js`](src/cantus/points.js) | Loads the point library: stable points for every note of every fractal, built by [`tools/build-points.mjs`](tools/build-points.mjs) |
 | [`src/cantus/midi.js`](src/cantus/midi.js) | Reads MIDI files: notes, tempo, time signatures, and which track plays which part |
 | [`src/cantus/timeline.js`](src/cantus/timeline.js) | The song as notes in time, with its checks and limits |
-| [`src/cantus/mapper.js`](src/cantus/mapper.js) | Gives every note a point and a speed that play it |
+| [`src/cantus/mapper.js`](src/cantus/mapper.js) | Gives every note a point and a speed that play it, and a voice to play it on; picks the drum sounds |
 | [`src/cantus/scheduler.js`](src/cantus/scheduler.js) | Sends each note to the audio thread just ahead of time, on the audio clock: play, pause, seek, loop |
 | [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song |
 

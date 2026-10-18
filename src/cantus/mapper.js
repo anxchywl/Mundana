@@ -9,7 +9,7 @@
 // preferred period, stable, and not moved by octaves. Drums are not notes but sounds: a kick is an orbit that escapes
 // (a click), the others are chaos (noise), brighter or darker.
 
-import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=24';
+import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=25';
 
 export const RATE_MIN = RATE * 2 ** (-PITCH_DOWN / 12);
 export const RATE_MAX = RATE * 2 ** (PITCH_UP / 12);
