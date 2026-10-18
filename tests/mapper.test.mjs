@@ -31,8 +31,8 @@ test('every press plays its note: rate / period is the note, inside the rate lim
     assert.equal(p.releaseS, RELEASE[p.part]);
   }
   assert.equal(plan.fractal, 'mandelbrot');
-  assert.equal(plan.camera.length, 1);
-  assert.deepEqual(plan.morphs, []);
+  assert.deepEqual(plan.layout, [{start: 0, end: plan.timeline.duration, fractal: 'mandelbrot'}]);
+  assert.deepEqual(plan.morphs, [], 'one fractal: no morphs');
 });
 
 test('the melody plays one note at a time on voice 0, the other parts on the other voices', () => {

@@ -8,6 +8,12 @@
 // the lowest cost: close to the last note's point on the same voice (the drawn orbits move little), near the part's
 // preferred period, stable, and not moved by octaves. Drums are not notes but sounds: a kick is an orbit that escapes
 // (a click), the others are chaos (noise), brighter or darker.
+//
+// The plan also holds the picture, as a function of song time: which fractal is on screen (one for the whole song, one
+// per section from a set list, or a new one every few bars), the morphs between them, which land on downbeats, and
+// camera keyframes that frame the notes phrase by phrase. The notes are planned twice: the second time each note
+// prefers points inside the framing of its moment, so a fast passage stays in one framing instead of chasing every
+// note. cameraAt and morphAt read the picture back at any song time, so pause, seek and loop are right at once.
 
 import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=25';
 
@@ -25,7 +31,30 @@ export const COST = {
   radiusScale: 0.002, // a radius of this many view spans or more costs nothing
   radiusCap: 4,
   moved: 0.2, // per octave a note had to move
+  camera: 0.5, // per half span a point lies outside the framing of its moment (second pass only)
 };
+
+/** the camera and the morphs */
+export const CAMERA = {
+  hold: 1.5, // seconds each framing is held at least
+  glide: 0.8, // a move takes at most this long
+  glideShare: 0.4, // and at most this share of its window
+  margin: 1.4, // the span is this many times the larger side of the notes' box
+  minSpan: 0.15, // and between these shares of the fractal's starting span
+  maxSpan: 1.2,
+  stayMove: 0.1, // a new framing closer than this share of the span to the last one, and
+  staySpan: 0.15, // a span within this share of it, keeps the last one
+  morph: 1.7, // a morph takes this long, or one bar if that is shorter
+};
+// the same zoom limits as the page (main.js): float32 runs out of digits below MIN_SPAN
+export const MIN_SPAN = 6e-5;
+export const MAX_SPAN = 60;
+
+/** which fractal is on screen: one for the song, one per section, or a new one every few bars */
+export const LAYOUTS = ['one', 'sections', 'bars'];
+export const SET_LIST = ['mandelbrot', 'multibrot', 'burning-ship', 'lambda', 'inverted'];
+export const MAX_SET = 16;
+export const EVERY = {min: 4, max: 32, value: 8};
 
 /** how long each part's notes take to die away after they end, in seconds */
 export const RELEASE = {melody: 0.04, chords: 0.08, bass: 0.03, drums: 0.015};
@@ -40,6 +69,9 @@ export const DRUM = {
 
 export const DEFAULTS = {
   voices: 4,
+  layout: 'one',
+  every: EVERY.value,
+  setList: SET_LIST,
   parts: {
     melody: {fractal: 'mandelbrot', period: 6, mute: false},
     chords: {fractal: 'mandelbrot', period: 4, mute: false},
@@ -53,6 +85,9 @@ const SAME_TIME = 0.001; // notes starting this close together count as one chor
 const MIN_LEFT = 0.1; // a note that lost its voice comes back on a free one if this much of it is left
 
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);
+// the page's ease (main.js): it leaves and lands softly
+const easeInOut = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
+const byKey = new Map(fractals.map((f) => [f.key, f]));
 
 /** the fractals a pitched part can play on: the library has at least MIN_PERIODS periods for them */
 export const pitchedFractals = (points) =>
@@ -62,7 +97,16 @@ export const pitchedFractals = (points) =>
 export const settingsOf = (settings = {}, points) => {
   const ok = new Set(pitchedFractals(points));
   const v = Math.round(Number(settings.voices));
-  const out = {voices: v >= 1 && v <= MAX_VOICES ? v : DEFAULTS.voices, parts: {}};
+  const every = Math.round(Number(settings.every));
+  let setList = (Array.isArray(settings.setList) ? settings.setList : []).filter((k) => ok.has(k)).slice(0, MAX_SET);
+  if (!setList.length) setList = SET_LIST.filter((k) => ok.has(k) || !points);
+  const out = {
+    voices: v >= 1 && v <= MAX_VOICES ? v : DEFAULTS.voices,
+    layout: LAYOUTS.includes(settings.layout) ? settings.layout : DEFAULTS.layout,
+    every: every >= EVERY.min && every <= EVERY.max ? every : EVERY.value,
+    setList,
+    parts: {},
+  };
   for (const part of Object.keys(DEFAULTS.parts)) {
     const d = DEFAULTS.parts[part];
     const s = settings.parts?.[part] || {};
@@ -81,7 +125,7 @@ export const settingsOf = (settings = {}, points) => {
  * The best point to play a note on: {c, rate, shift}, or null if the fractal has no period that can play it even
  * after moving it by octaves. `prev` is the last point of the same voice on the same fractal, or null.
  */
-const pick = (lib, view, preferred, midi, prev) => {
+const pick = (lib, view, preferred, midi, prev, frame) => {
   const periods = lib.periods;
   const pMin = periods[0];
   const pMax = periods[periods.length - 1];
@@ -104,11 +148,15 @@ const pick = (lib, view, preferred, midi, prev) => {
     const periodCost = COST.period * Math.abs(Math.log2(p / preferred));
     for (const c of lib.cycles.get(p)) {
       const dist = prev ? Math.hypot(c.point[0] - prev[0], c.point[1] - prev[1]) / view.span : 0;
-      const cost =
+      let cost =
         COST.distance * dist +
         periodCost +
         COST.radius * Math.min(COST.radiusCap, (view.span * COST.radiusScale) / c.radius) +
         COST.moved * Math.abs(shift);
+      if (frame) {
+        const out = Math.hypot(c.point[0] - frame.centre[0], c.point[1] - frame.centre[1]) / (frame.span / 2) - 1;
+        if (out > 0) cost += COST.camera * out;
+      }
       if (cost < bestCost) {
         bestCost = cost;
         best = {c, rate, shift};
@@ -175,43 +223,258 @@ const chordOrder = (tones) => {
   return out;
 };
 
+/** the downbeats of a song to place changes and camera windows on: its bars, else its beats, else every half second */
+const gridOf = (timeline) => {
+  if (timeline.bars?.length >= 2) return timeline.bars;
+  if (timeline.tempo?.beats?.length >= 2) return timeline.tempo.beats;
+  const out = [];
+  for (let t = 0; t < timeline.duration && out.length < 20000; t += 0.5) out.push(t);
+  return out;
+};
+
+/** the index of the last element of a sorted list whose `key` is <= v, or -1 */
+const lastAtOrBefore = (list, v, key) => {
+  let lo = 0;
+  let hi = list.length - 1;
+  let r = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (key(list[mid]) <= v) {
+      r = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return r;
+};
+
+/** how long a morph into a change at T takes: 1.7 s, or the bar before T if that is shorter */
+const morphLength = (grid, T) => {
+  const i = lastAtOrBefore(grid, T - 1e-9, (x) => x);
+  const bar = i >= 0 ? T - grid[i] : CAMERA.morph;
+  return Math.min(CAMERA.morph, bar > 0 ? bar : CAMERA.morph);
+};
+
 /**
- * timeline: a checked Timeline. settings: {voices, parts: {melody|chords|bass: {fractal, period, mute}, drums: {mute}}}
- * (see DEFAULTS; anything missing or wrong falls back). points: the index from loadPoints(). Returns a ShowPlan with
- * `fractal` (the one on screen) and counts: `moved` notes shifted by octaves, `skipped` melody notes not played
- * because a higher one starts at the same time, `left` notes of each part left out for lack of voices, `stolen` notes
- * cut short to free their voice, `drumsBorrowed` when the drums use the Burning ship's sounds, `drumsOnly` when the
- * song has nothing but drums.
+ * Which fractal is on screen when: [{start, end, fractal}], every change on a downbeat. A change closer than the hold
+ * plus a morph to the one before, or closer than the hold to the end, is left out, so every fractal is on screen long
+ * enough to frame its notes.
  */
-export const planShow = (timeline, settings = {}, points) => {
+export const layoutOf = (timeline, set) => {
+  const end = timeline.duration;
+  const first = set.layout === 'one' ? set.parts.melody.fractal : set.setList[0];
+  if (set.layout === 'one') return [{start: 0, end, fractal: first}];
+  const grid = gridOf(timeline);
+  const changes = [];
+  if (set.layout === 'sections') {
+    timeline.sections.forEach((s, i) => {
+      if (i === 0) return;
+      // a section that does not start on a downbeat changes on the nearest one
+      let best = 0;
+      for (let k = 1; k < grid.length; k++) if (Math.abs(grid[k] - s.start) < Math.abs(grid[best] - s.start)) best = k;
+      changes.push({time: grid[best], fractal: set.setList[i % set.setList.length]});
+    });
+  } else {
+    for (let k = set.every, j = 1; k < grid.length; k += set.every, j++) changes.push({time: grid[k], fractal: set.setList[j % set.setList.length]});
+  }
+  const out = [{start: 0, end, fractal: first}];
+  for (const c of changes) {
+    const last = out[out.length - 1];
+    if (c.fractal === last.fractal || c.time - last.start < CAMERA.hold + CAMERA.morph || end - c.time < CAMERA.hold) continue;
+    last.end = c.time;
+    out.push({start: c.time, end, fractal: c.fractal});
+  }
+  return out;
+};
+
+/**
+ * Camera windows: from each downbeat, bars are joined until the window lasts 1.5 s or more; a window never crosses a
+ * fractal change. The last window before a change also ends where the morph begins, at least 1.5 s after its start.
+ */
+const windowsOf = (timeline, layout, morphs) => {
+  const grid = gridOf(timeline);
+  const out = [];
+  layout.forEach((seg, si) => {
+    const starts = [seg.start];
+    for (const g of grid) if (g > seg.start + 1e-9 && g < seg.end - 1e-9) starts.push(g);
+    const mine = [];
+    let i = 0;
+    while (i < starts.length) {
+      const from = starts[i];
+      let j = i + 1;
+      while (j < starts.length && starts[j] - from < CAMERA.hold) j++;
+      mine.push({start: from, end: j < starts.length ? starts[j] : seg.end, fractal: seg.fractal, seg: si});
+      i = j;
+    }
+    // a short last window joins the one before; so does one that would end within the hold of the next morph
+    const next = morphs.find((m) => Math.abs(m.time + m.duration - seg.end) < 1e-9);
+    const until = next ? next.time : seg.end;
+    while (mine.length > 1 && (seg.end - mine[mine.length - 1].start < CAMERA.hold || until - mine[mine.length - 1].start < CAMERA.hold)) {
+      const w = mine.pop();
+      mine[mine.length - 1].end = w.end;
+    }
+    out.push(...mine);
+  });
+  return out;
+};
+
+/** the framing of the notes sounding in a window, {centre, span}, or null when nothing sounds in it. Notes that start
+ * while the camera glides into the next window count too, so the glide never leaves one behind. */
+const framingOf = (w, presses, longest, ahead) => {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  const until = w.end + ahead;
+  const from = lastAtOrBefore(presses, until - 1e-12, (p) => p.time);
+  for (let k = from; k >= 0 && presses[k].time > w.start - longest - 1e-9; k--) {
+    const p = presses[k];
+    if (p.time + p.duration <= w.start || p.time >= until) continue;
+    x0 = Math.min(x0, p.point[0]);
+    x1 = Math.max(x1, p.point[0]);
+    y0 = Math.min(y0, p.point[1]);
+    y1 = Math.max(y1, p.point[1]);
+  }
+  if (x0 === Infinity) return null;
+  const view = byKey.get(w.fractal).view;
+  let span = CAMERA.margin * Math.max(x1 - x0, y1 - y0);
+  span = Math.min(view.span * CAMERA.maxSpan, Math.max(view.span * CAMERA.minSpan, span));
+  span = Math.min(MAX_SPAN, Math.max(MIN_SPAN, span));
+  return {centre: [(x0 + x1) / 2, (y0 + y1) / 2], span};
+};
+
+/** how long the camera takes to glide into a window */
+const glideOf = (w) => Math.min(CAMERA.glide, CAMERA.glideShare * (w.end - w.start));
+
+/** each window's framing, a window with nothing sounding keeping the one before (the first: the starting view) */
+const framingsOf = (windows, presses) => {
+  const longest = presses.reduce((m, p) => Math.max(m, p.duration), 0);
+  let prev = null;
+  return windows.map((w, i) => {
+    const next = windows[i + 1];
+    const ahead = next && next.seg === w.seg ? glideOf(next) : 0;
+    const f = framingOf(w, presses, longest, ahead);
+    if (f) prev = f;
+    else if (!prev) {
+      const v = byKey.get(w.fractal).view;
+      prev = {centre: [v.cx, v.cy], span: v.span};
+    }
+    return {...prev, empty: !f};
+  });
+};
+
+/**
+ * timeline: a checked Timeline. settings: {voices, layout, every, setList, parts: {melody|chords|bass: {fractal,
+ * period, mute}, drums: {mute}}} (see DEFAULTS; anything missing or wrong falls back). points: the index from
+ * loadPoints(). opts: {reducedMotion} (cuts instead of glides and morphs). Returns a ShowPlan with `fractal` (the one
+ * on screen first), `layout` ([{start, end, fractal}]) and counts: `moved` notes shifted by octaves, `skipped` melody
+ * notes not played because a higher one starts at the same time, `left` notes of each part left out for lack of
+ * voices, `stolen` notes cut short to free their voice, `drumsBorrowed` when the drums use the Burning ship's sounds,
+ * `drumsOnly` when the song has nothing but drums.
+ */
+export const planShow = (timeline, settings = {}, points, opts = {}) => {
   const set = settingsOf(settings, points);
   const parts = set.parts;
-  const n = set.voices;
-  const show = parts.melody.fractal;
-  const showF = fractals.find((x) => x.key === show);
-  for (const part of PITCHED) {
-    const key = parts[part].fractal;
+  const reduced = !!opts.reducedMotion;
+  const used = set.layout === 'one' ? PITCHED.map((part) => parts[part].fractal) : set.setList;
+  for (const key of used) {
     if (!points?.fractals?.[key]?.periods.length) {
-      const f = fractals.find((x) => x.key === key);
+      const f = byKey.get(key);
       throw new Error(`There are no notes for ${f ? f.name : key}.`);
     }
   }
-  const libOf = (part) => points.fractals[parts[part].fractal];
-  const viewOf = (part) => fractals.find((x) => x.key === parts[part].fractal).view;
-  const centre = [showF.view.cx, showF.view.cy];
-  const drums = drumPoints(points, show, centre);
+  const layout = layoutOf(timeline, set);
+  const at = (t) => layout[Math.max(0, lastAtOrBefore(layout, t, (s) => s.start))].fractal;
+  const grid = gridOf(timeline);
+  const morphs = [];
+  for (let i = 1; i < layout.length && !reduced; i++) {
+    const T = layout[i].start;
+    const d = morphLength(grid, T);
+    morphs.push({time: T - d, from: layout[i - 1].fractal, to: layout[i].fractal, duration: d});
+  }
+  const windows = windowsOf(timeline, layout, morphs);
+
+  // first without the camera, then with the framings that plan gives
+  let result = assign(timeline, set, points, at, null, null);
+  const frames = framingsOf(windows, result.presses);
+  result = assign(timeline, set, points, at, windows, frames);
+  const presses = result.presses;
+
+  // the camera: each window's framing, held while it barely moves; a change of fractal glides with its morph
+  const final = framingsOf(windows, presses);
+  const camera = [];
+  final.forEach((f, i) => {
+    const w = windows[i];
+    if (i === 0) {
+      camera.push({time: 0, centre: f.centre, span: f.span, ease: 'cut', duration: 0});
+      return;
+    }
+    const last = camera[camera.length - 1];
+    const still = Math.hypot(f.centre[0] - last.centre[0], f.centre[1] - last.centre[1]) < CAMERA.stayMove * last.span && Math.abs(f.span / last.span - 1) < CAMERA.staySpan;
+    if (f.empty || still) return;
+    const change = w.start === layout[w.seg].start && w.seg > 0;
+    const morph = change ? morphs.find((m) => Math.abs(m.time + m.duration - w.start) < 1e-9) : null;
+    if (reduced) camera.push({time: w.start, centre: f.centre, span: f.span, ease: 'cut', duration: 0});
+    else if (morph) camera.push({time: morph.time, centre: f.centre, span: f.span, ease: 'glide', duration: morph.duration});
+    else camera.push({time: w.start, centre: f.centre, span: f.span, ease: 'glide', duration: glideOf(w)});
+  });
+
+  return {
+    presses,
+    camera,
+    morphs,
+    timeline,
+    fractal: layout[0].fractal,
+    layout,
+    voices: set.voices,
+    moved: result.moved,
+    skipped: result.skipped,
+    left: result.left,
+    stolen: result.stolen,
+    drumsBorrowed: presses.some((p) => p.part === 'drums' && p.fractal !== at(p.time)),
+    drumsOnly: timeline.notes.length > 0 && timeline.notes.every((x) => x.part === 'drums'),
+  };
+};
+
+/**
+ * One planning pass: every note gets a point and a voice. `screenAt(t)` is the fractal on screen at song time t; with a set
+ * list every pitched note plays on it, with one fractal each part keeps its own. With `windows` and `frames`, notes
+ * prefer points inside the framing of their window, and the drums take the sounds nearest its centre.
+ */
+const assign = (timeline, set, points, screenAt, windows, frames) => {
+  const parts = set.parts;
+  const n = set.voices;
+  const one = set.layout === 'one';
+  const fractalOf = (part, t) => (one ? parts[part].fractal : screenAt(t));
+  const frameAt = (t) => {
+    if (!windows) return null;
+    const i = lastAtOrBefore(windows, t, (w) => w.start);
+    return i >= 0 ? frames[i] : null;
+  };
+  // the drums of each fractal, seen around its starting view's centre, or around each window's framing
+  const drumCache = new Map();
+  const drumsAt = (t) => {
+    const key = screenAt(t);
+    const i = windows ? lastAtOrBefore(windows, t, (w) => w.start) : -1;
+    const id = `${key} ${i}`;
+    if (!drumCache.has(id)) {
+      const v = byKey.get(key).view;
+      drumCache.set(id, drumPoints(points, key, i >= 0 ? frames[i].centre : [v.cx, v.cy]));
+    }
+    return drumCache.get(id);
+  };
 
   const presses = [];
   let moved = 0;
   const pitched = (note, part, voice, prev) => {
     const midi = Math.round(note.midi);
-    const best = pick(libOf(part), viewOf(part), parts[part].period, midi, prev);
+    const key = fractalOf(part, note.start);
+    const best = pick(points.fractals[key], byKey.get(key).view, parts[part].period, midi, prev && prev.fractal === key ? prev.point : null, frameAt(note.start));
     if (!best) return null;
     if (best.shift) moved++;
     const press = {
       time: note.start,
       voice,
-      fractal: parts[part].fractal,
+      fractal: key,
       point: best.c.point,
       z0: best.c.z0,
       rate: best.rate,
@@ -243,7 +506,7 @@ export const planShow = (timeline, settings = {}, points) => {
     const until = i + 1 < tune.length ? tune[i + 1].start : Infinity;
     press.duration = Math.min(press.duration, until - press.time);
     presses.push(press);
-    prev = press.point;
+    prev = {fractal: press.fractal, point: press.point};
   }
 
   // bass, chords and drums share voices 1 to n - 1, in note start order
@@ -315,7 +578,7 @@ export const planShow = (timeline, settings = {}, points) => {
       let press;
       if (note.part === 'drums') {
         const kind = DRUM[note.drum] ? note.drum : 'other';
-        const d = drums[kind];
+        const d = drumsAt(t)[kind];
         if (!d) {
           left.drums++;
           continue;
@@ -372,7 +635,7 @@ export const planShow = (timeline, settings = {}, points) => {
       }
       if (note.part !== 'drums') {
         const p = voice > 0 ? prevOn[voice] : null;
-        press = pitched(note, note.part, voice, p && p.fractal === parts[note.part].fractal ? p.point : null);
+        press = pitched(note, note.part, voice, p);
         if (!press) continue;
         press.order = q;
         if (voice < 0) {
@@ -399,18 +662,38 @@ export const planShow = (timeline, settings = {}, points) => {
   }
   presses.sort((a, b) => a.time - b.time || a.voice - b.voice);
 
-  return {
-    presses,
-    camera: [{time: 0, centre, span: showF.view.span, ease: 'cut', duration: 0}],
-    morphs: [],
-    timeline,
-    fractal: show,
-    voices: n,
-    moved,
-    skipped,
-    left,
-    stolen,
-    drumsBorrowed: drums.borrowed && presses.some((p) => p.part === 'drums' && p.fractal !== show),
-    drumsOnly: timeline.notes.length > 0 && timeline.notes.every((x) => x.part === 'drums'),
-  };
+  return {presses, moved, skipped, left, stolen};
+};
+
+/** the view at song time t, {cx, cy, span}: the keyframe in force, or the glide into it (the centre moves in a
+ * straight line, the span evenly in log space, both eased). Pure: the same plan and time give the same view. */
+export const cameraAt = (plan, t) => {
+  const cam = plan.camera;
+  const i = Math.max(0, lastAtOrBefore(cam, t, (k) => k.time));
+  const k = cam[i];
+  if (i > 0 && k.ease === 'glide' && k.duration > 0 && t < k.time + k.duration) {
+    const a = cam[i - 1];
+    const e = easeInOut(Math.max(0, (t - k.time) / k.duration));
+    return {
+      cx: a.centre[0] + (k.centre[0] - a.centre[0]) * e,
+      cy: a.centre[1] + (k.centre[1] - a.centre[1]) * e,
+      span: Math.exp(Math.log(a.span) + (Math.log(k.span) - Math.log(a.span)) * e),
+    };
+  }
+  return {cx: k.centre[0], cy: k.centre[1], span: k.span};
+};
+
+/** the morph under way at song time t, {from, to, e} with e eased from 0 to 1, or null. Pure. */
+export const morphAt = (plan, t) => {
+  const i = lastAtOrBefore(plan.morphs, t, (m) => m.time);
+  if (i < 0) return null;
+  const m = plan.morphs[i];
+  if (t >= m.time + m.duration) return null;
+  return {from: m.from, to: m.to, e: easeInOut((t - m.time) / m.duration)};
+};
+
+/** the fractal whose notes play at song time t (during a morph, still the one it leaves). Pure. */
+export const fractalAt = (plan, t) => {
+  const l = plan.layout;
+  return l[Math.max(0, lastAtOrBefore(l, t, (s) => s.start))].fractal;
 };
