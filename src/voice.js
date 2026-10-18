@@ -22,6 +22,9 @@ const VELOCITY_DB = 30; // velocity 0 to 1 spans this many decibels
 const GAIN_S = 0.02; // how quickly the master gain follows the number of sounding voices
 const LIMIT = 0.9; // above this the master output is bent softly toward 1
 
+// every fractal's step, by index
+const S = fractals.map((f) => f.step);
+
 // Catmull-Rom through four values at t between the second and the third
 const curve = (a, b, c, d, t, t2, t3) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3);
 
@@ -31,6 +34,7 @@ export class Voice {
   constructor(sampleRate) {
     this.sr = sampleRate;
     this.f = fractals[0];
+    this.fi = 0; // the index of f in fractals
     this.k = 0;
     this.rate = RATE;
     this.fading = true;
@@ -63,6 +67,7 @@ export class Voice {
     if (m.type === 'fractal') {
       if (!fractals[m.index]) return;
       this.f = fractals[m.index];
+      this.fi = m.index;
       this.k = Number.isFinite(m.param) ? m.param : 0;
       this.stop();
     } else if (m.type === 'param') {
@@ -106,7 +111,7 @@ export class Voice {
     p[1] = p[3] = z0[1];
     this.escaped = false;
     for (let i = 4; i < 8; i += 2) {
-      this.f.step(p[i - 2], p[i - 1], c[0], c[1], this.next, this.k);
+      this.stepFrom(i / 2);
       p[i] = this.next[0];
       p[i + 1] = this.next[1];
     }
@@ -132,6 +137,51 @@ export class Voice {
     }
   }
 
+  /**
+   * one step of the orbit from point j - 1 of the window (p[2j - 2], p[2j - 1]) into this.next. Every fractal has its
+   * own call here, so each call only ever sees one function, which the optimiser inlines. One call shared by all of
+   * them would see several functions once voices play different fractals and would not be inlined; every number passed
+   * to it would then be boxed, garbage the audio thread would have to collect. This method itself takes only a small
+   * integer, so nothing is boxed even if it is not inlined.
+   */
+  stepFrom(j) {
+    const p = this.p;
+    const x = p[2 * j - 2];
+    const y = p[2 * j - 1];
+    const cx = this.c[0];
+    const cy = this.c[1];
+    const out = this.next;
+    const k = this.k;
+    // prettier-ignore
+    switch (this.fi) {
+      case 0: S[0](x, y, cx, cy, out, k); break;
+      case 1: S[1](x, y, cx, cy, out, k); break;
+      case 2: S[2](x, y, cx, cy, out, k); break;
+      case 3: S[3](x, y, cx, cy, out, k); break;
+      case 4: S[4](x, y, cx, cy, out, k); break;
+      case 5: S[5](x, y, cx, cy, out, k); break;
+      case 6: S[6](x, y, cx, cy, out, k); break;
+      case 7: S[7](x, y, cx, cy, out, k); break;
+      case 8: S[8](x, y, cx, cy, out, k); break;
+      case 9: S[9](x, y, cx, cy, out, k); break;
+      case 10: S[10](x, y, cx, cy, out, k); break;
+      case 11: S[11](x, y, cx, cy, out, k); break;
+      case 12: S[12](x, y, cx, cy, out, k); break;
+      case 13: S[13](x, y, cx, cy, out, k); break;
+      case 14: S[14](x, y, cx, cy, out, k); break;
+      case 15: S[15](x, y, cx, cy, out, k); break;
+      case 16: S[16](x, y, cx, cy, out, k); break;
+      case 17: S[17](x, y, cx, cy, out, k); break;
+      case 18: S[18](x, y, cx, cy, out, k); break;
+      case 19: S[19](x, y, cx, cy, out, k); break;
+      case 20: S[20](x, y, cx, cy, out, k); break;
+      case 21: S[21](x, y, cx, cy, out, k); break;
+      case 22: S[22](x, y, cx, cy, out, k); break;
+      case 23: S[23](x, y, cx, cy, out, k); break;
+      default: S[this.fi](x, y, cx, cy, out, k);
+    }
+  }
+
   stop() {
     if (this.on) this.releasing = true;
   }
@@ -141,7 +191,7 @@ export class Voice {
     if (this.escaped) return;
     const p = this.p;
     p.copyWithin(0, 2);
-    this.f.step(p[4], p[5], this.c[0], this.c[1], this.next, this.k);
+    this.stepFrom(3);
     const x = this.next[0];
     const y = this.next[1];
     if (!(x * x + y * y <= ESCAPE_SQ)) {

@@ -63,6 +63,7 @@ class Ring {
   }
 }
 
+const INDEX = new Map(fractals.map((f, i) => [f.key, i]));
 const finite = (v, fallback) => (Number.isFinite(v) ? v : fallback);
 const pair = (v) => Array.isArray(v) && v.length === 2 && Number.isFinite(v[0]) && Number.isFinite(v[1]);
 
@@ -123,7 +124,7 @@ class OrbitVoice extends AudioWorkletProcessor {
   press(m) {
     const ring = this.ringFor(m);
     // the fractal is looked up here, once, not on the audio callback
-    const index = fractals.findIndex((f) => f.key === m.fractal);
+    const index = INDEX.get(m.fractal) ?? -1;
     if (!ring || index < 0 || !pair(m.p) || !Number.isFinite(m.rate)) return;
     this.room(ring);
     const i = ring.push(Math.round(m.at * sampleRate), PRESS);
@@ -170,6 +171,7 @@ class OrbitVoice extends AudioWorkletProcessor {
     const o = i * 9;
     // a song note plays the fractal itself, held for its whole length
     voice.f = fractals[ring.fractal[i]];
+    voice.fi = ring.fractal[i];
     voice.k = n[o];
     voice.julia = null;
     voice.fading = false;
