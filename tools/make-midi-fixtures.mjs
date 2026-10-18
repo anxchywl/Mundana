@@ -175,6 +175,32 @@ files['chromatic.mid'] = [
   ...track([name('Chromatic scale'), ...line(Array.from({length: 25}, (_, i) => [48 + i, 1]), 0, PPQ)]),
 ];
 
+// a small band at 160 bpm for the voice pool: a six-note chord held 4 s then a four-note one, a bass, a melody in
+// sixteenth notes and a drum loop (kick, snare, hats in eighths) on channel 10
+const held = (ch, keys, ticks, wait = 0) => [
+  ...keys.map((k, i) => on(i ? 0 : wait, ch, k, 72)),
+  ...keys.map((k, i) => off(i ? 0 : ticks, ch, k)),
+];
+const run = [72, 74, 76, 77, 79, 81, 83, 84, 83, 81, 79, 77, 76, 74, 72, 74];
+const loop = [];
+for (let e = 0; e < 32; e++) {
+  const keys = [42];
+  if (e % 4 === 0) keys.push(36);
+  if (e % 4 === 2) keys.push(38);
+  loop.push(...keys.map((k, i) => on(i || !e ? 0 : PPQ / 2 - 60, 9, k, k === 42 ? 70 : 110)), ...keys.map((k, i) => off(i ? 0 : 60, 9, k)));
+}
+files['band.mid'] = [
+  ...header(1, 5, PPQ),
+  ...track([name('Band'), tempo(0, 375000), sig(0, 4, 4)]),
+  ...track([name('Lead'), ...line(Array.from({length: 64}, (_, i) => [run[i % 16], 0.25]), 0, PPQ)]),
+  ...track([name('Chords'), ...held(1, [48, 52, 55, 59, 62, 65], 5120), ...held(1, [53, 57, 60, 64], 640)]),
+  ...track([name('Bass'), program(0, 2, 32), ...line([[36, 32 / 3], [41, 4 / 3]], 2, PPQ, 90)]),
+  ...track([name('Drums'), ...loop]),
+];
+
+// nothing but a drum kit on channel 10
+files['drums-only.mid'] = [...header(0, 1, PPQ), ...track([name('Kit'), ...loop])];
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   mkdirSync(DIR, {recursive: true});
   for (const [file, bytes] of Object.entries(files)) writeFileSync(DIR + file, Uint8Array.from(bytes));

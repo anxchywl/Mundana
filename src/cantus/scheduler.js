@@ -37,6 +37,7 @@ export class Transport {
     this.wallNow = wallNow;
     this.duration = plan.timeline.duration;
     this.presses = plan.presses;
+    this.voices = 1 + plan.presses.reduce((m, p) => Math.max(m, p.voice), 0);
     // presses and releases in one list by time; at the same time a release comes first, so it never ends a new note
     const events = [];
     for (const p of plan.presses) {
@@ -93,7 +94,7 @@ export class Transport {
   }
 
   pressAt(p, at, offset = 0) {
-    this.send({type: 'press', voice: p.voice, at, fractal: p.fractal, p: p.point, z0: p.z0, rate: p.rate, velocity: p.velocity, offset});
+    this.send({type: 'press', voice: p.voice, at, fractal: p.fractal, p: p.point, z0: p.z0, rate: p.rate, velocity: p.velocity, offset, releaseS: p.releaseS});
   }
 
   /** every note that is sounding at song time t, pressed at context time `at` as if it began `t - start` ago */
@@ -136,7 +137,7 @@ export class Transport {
       if (!this.loop || until < this.loop.b) break;
       // the wrap is scheduled inside the horizon: the end of the loop and its start share one sample
       const at = this.ctxOf(anchor, this.loop.b);
-      this.send({type: 'release', voice: 0, at});
+      for (let v = 0; v < this.voices; v++) this.send({type: 'release', voice: v, at});
       this.anchors.push({ctx: at, song: this.loop.a});
       this.cursor = firstFrom(ev, this.loop.a);
       this.pressHeld(this.loop.a, at);
