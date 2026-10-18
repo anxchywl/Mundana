@@ -1,13 +1,13 @@
-// Show mode: the Cantus panel (choose a MIDI file, see its tracks and parts, press Play), the transport bar, and the
-// show itself, where the page follows the plan: the camera holds the fractal's starting view and every sounding note
-// is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls into it
+// Show mode: the Cantus panel (choose a MIDI file, see its tracks and parts, set the voices and each part's fractal,
+// press Play), the transport bar, and the show itself, where the page follows the plan: the camera holds the fractal's
+// starting view and every sounding note is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls into it
 // through a few small hooks; everything it needs from the page comes in `api`.
 
-import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=24';
-import {planShow} from './mapper.js?v=24';
-import {Transport} from './scheduler.js?v=24';
-import {loadPoints} from './points.js?v=24';
-import {paramOf} from '../fractals.js?v=24';
+import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=25';
+import {planShow, settingsOf, pitchedFractals, DEFAULTS, MAX_VOICES} from './mapper.js?v=25';
+import {Transport} from './scheduler.js?v=25';
+import {loadPoints} from './points.js?v=25';
+import {paramOf} from '../fractals.js?v=25';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -26,6 +26,16 @@ const clock = (s) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 const count = (n, one, many) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
+const MIN_VOICES = 4; // the panel offers 4 to 6 voices
+const LEFT = {bass: ['bass note', 'bass notes'], chords: ['chord note', 'chord notes'], drums: ['drum hit', 'drum hits']};
+const MAX_DRAWN = 6;
+
+const option = (value, label) => {
+  const o = document.createElement('option');
+  o.value = String(value);
+  o.textContent = label;
+  return o;
+};
 
 export const initShow = (api) => {
   const panel = $('#cantus');
@@ -41,6 +51,9 @@ export const initShow = (api) => {
   let mode = 'off'; // 'off', 'playing' or 'paused'
   let dragging = false;
   let shownTime = '';
+  let settings = settingsOf(DEFAULTS, null);
+  let longest = 0; // the longest press of the plan, so drawing looks back no further than that
+  const byKey = new Map(api.fractals.map((f) => [f.key, f]));
 
   const panelOpen = () => panel.classList.contains('open');
   const togglePanel = (open = !panelOpen()) => {
@@ -86,17 +99,18 @@ export const initShow = (api) => {
     replan();
   });
 
-  const replan = () => {
+  const replan = (announce = true) => {
     transport = null;
     plan = null;
     try {
-      plan = planShow(timeline, {}, points);
+      plan = planShow(timeline, settings, points);
     } catch (e) {
       fail(e, 'This song cannot be played.');
     }
     if (plan && !plan.presses.length) {
-      api.toast('No melody found in this file. Try giving a track the melody part.');
-    }
+      if (announce) api.toast('Nothing here can play. Give a track a part, or turn a part back on.');
+    } else if (plan?.drumsOnly && announce) api.toast('No melody in this song. Playing the drums.');
+    longest = plan ? plan.presses.reduce((m, p) => Math.max(m, p.duration), 0) : 0;
     live.plan = plan;
     live.transport = null;
     renderSong();
@@ -116,7 +130,7 @@ export const initShow = (api) => {
       name.textContent = tr.name;
       const n = document.createElement('span');
       n.className = 'c-count';
-      n.textContent = tr.guessed ? `${count(tr.notes, 'note', 'notes')}, drums by name` : count(tr.notes, 'note', 'notes');
+      n.textContent = tr.guessed ? `${count(tr.notes, 'note', 'notes')}, guessed as drums by its name` : count(tr.notes, 'note', 'notes');
       const sel = document.createElement('select');
       sel.setAttribute('aria-label', `Part for ${tr.name}`);
       for (const [value, label] of PARTS) {
@@ -129,7 +143,7 @@ export const initShow = (api) => {
       sel.addEventListener('change', () => {
         stopShow();
         timeline = setTrackPart(timeline, i, sel.value);
-        replan();
+        replan(false);
       });
       const text = document.createElement('span');
       text.className = 'c-track';
@@ -137,12 +151,77 @@ export const initShow = (api) => {
       li.append(text, sel);
       list.appendChild(li);
     });
-    const notes = ['Only the melody plays for now, one note at a time.'];
+    renderParts();
+    const notes = [];
+    for (const part of ['chords', 'bass', 'drums']) {
+      const n = plan?.left[part];
+      if (n) notes.push(`${count(n, ...LEFT[part])} left out: more than ${plan.voices} voices.`);
+    }
+    if (plan?.drumsBorrowed) notes.push(`The drums use sounds of the Burning ship: the ${byKey.get(plan.fractal).name} has none.`);
     if (plan?.moved) notes.push(`${count(plan.moved, 'note was', 'notes were')} moved by whole octaves to fit.`);
     if (plan?.skipped) notes.push(`${count(plan.skipped, 'lower note', 'lower notes')} under the melody left out.`);
     if (timeline.dropped) notes.push(`${count(timeline.dropped, 'very short note', 'very short notes')} dropped.`);
     $('#c-notes').textContent = notes.join(' ');
+    $('#c-notes').hidden = !notes.length;
     $('#c-play').disabled = !plan?.presses.length;
+  };
+
+  /** settings changed: the song stops and is planned again */
+  const change = (fn) => {
+    fn();
+    settings = settingsOf(settings, points);
+    stopShow();
+    replan(false);
+  };
+
+  // voices, and per part its fractal, its preferred period and a mute switch; rebuilt with the song
+  const renderParts = () => {
+    const voices = $('#c-voices');
+    if (!voices.options.length) {
+      for (let n = MIN_VOICES; n <= MAX_VOICES; n++) voices.appendChild(option(n, String(n)));
+      voices.addEventListener('change', () => change(() => (settings.voices = Number(voices.value))));
+    }
+    voices.value = String(settings.voices);
+    const keys = pitchedFractals(points);
+    const list = $('#c-parts');
+    list.replaceChildren();
+    for (const [part, label] of [['melody', 'Melody'], ['chords', 'Chords'], ['bass', 'Bass'], ['drums', 'Drums']]) {
+      const s = settings.parts[part];
+      const li = document.createElement('li');
+      li.classList.toggle('muted', s.mute);
+      const name = document.createElement('span');
+      name.className = 'c-part';
+      name.textContent = label;
+      li.appendChild(name);
+      if (part === 'drums') {
+        const where = document.createElement('span');
+        where.className = 'c-where';
+        where.textContent = 'On the fractal on screen';
+        li.appendChild(where);
+      } else {
+        const fr = document.createElement('select');
+        fr.setAttribute('aria-label', `Fractal for the ${part}`);
+        for (const k of keys) fr.appendChild(option(k, byKey.get(k).name));
+        fr.value = s.fractal;
+        fr.addEventListener('change', () => change(() => (s.fractal = fr.value)));
+        const per = document.createElement('select');
+        per.setAttribute('aria-label', `Preferred period for the ${part}`);
+        const periods = points.fractals[s.fractal].periods;
+        for (const p of periods) per.appendChild(option(p, `Period ${p}`));
+        // the preferred period need not be one the fractal has; the nearest one it has is shown
+        per.value = String(periods.reduce((a, b) => (Math.abs(b - s.period) < Math.abs(a - s.period) ? b : a)));
+        per.addEventListener('change', () => change(() => (s.period = Number(per.value))));
+        li.append(fr, per);
+      }
+      const mute = document.createElement('button');
+      mute.className = 'c-mute';
+      mute.textContent = 'Mute';
+      mute.setAttribute('aria-pressed', String(s.mute));
+      mute.setAttribute('aria-label', `Mute the ${part}`);
+      mute.addEventListener('click', () => change(() => (s.mute = !s.mute)));
+      li.appendChild(mute);
+      list.appendChild(li);
+    }
   };
 
   // ---------- the show ----------
@@ -179,8 +258,9 @@ export const initShow = (api) => {
       transport = new Transport({ctx: a.ctx, send: api.send, plan, onEnd: () => stopShow()});
       live.transport = transport;
     }
+    api.send({type: 'voices', n: plan.voices});
     // the plan's fractal at its starting view; this also stops a manual note and leaves a Julia set
-    api.showFractal(plan.presses[0].fractal);
+    api.showFractal(plan.fractal);
     $('#hint').classList.add('gone');
     mode = 'playing';
     showBar();
@@ -239,7 +319,9 @@ export const initShow = (api) => {
     updateBar();
   };
 
-  /** each frame of a playing show: the orbit of every sounding note */
+  const drawn = [];
+
+  /** each frame of a playing show: the orbit of every sounding note, at most one a voice; a drum hit fades out */
   const draw = () => {
     const t = transport.now();
     const ps = plan.presses;
@@ -253,11 +335,17 @@ export const initShow = (api) => {
         lo = mid + 1;
       } else hi = mid - 1;
     }
-    // one voice plays one note at a time, so only the last note to start can be sounding
-    if (i < 0 || t >= ps[i].time + ps[i].duration) return;
-    const p = ps[i];
-    const f = api.fractals.find((x) => x.key === p.fractal);
-    api.drawOrbit(f, paramOf(f, {}), p.point);
+    // a sounding note started at most `longest` ago; each voice plays one note at a time
+    drawn.length = 0;
+    for (let k = i; k >= 0 && drawn.length < MAX_DRAWN && ps[k].time >= t - longest; k--) {
+      if (t < ps[k].time + ps[k].duration) drawn.push(ps[k]);
+    }
+    for (let k = drawn.length - 1; k >= 0; k--) {
+      const p = drawn[k];
+      const f = byKey.get(p.fractal);
+      const fade = p.part === 'drums' ? Math.max(0, 1 - (t - p.time) / p.duration) : 1;
+      api.drawOrbit(f, paramOf(f, {}), p.point, {escape: p.drum === 'kick', fade});
+    }
   };
 
   return {

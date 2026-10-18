@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=24';
-import {spots} from './spots.js?v=24';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=24';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=25';
+import {spots} from './spots.js?v=25';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=25';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -118,7 +118,7 @@ const interruptShow = () => cantus?.interrupt();
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=24', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=25', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -745,18 +745,20 @@ const strokeOrbit = (pts, shown, fade, colour) => {
 };
 
 /** the pressed point: a dashed ring around a dot */
-const markPoint = (p, colour) => {
+const markPoint = (p, colour, alpha = 1) => {
   const [px, py] = toScreen(p[0], p[1]);
-  ring(px, py, 14, ink.stone, 0.75);
+  ring(px, py, 14, ink.stone, 0.75 * alpha);
   dot(px, py, 3.5, colour);
 };
 
-/** a sounding orbit of a song: the whole path, in blue, and its point */
-const drawOrbit = (f, k, point) => {
+/** a sounding orbit of a song: the whole path and its point, in blue, or red for an orbit that escapes (a kick) */
+const drawOrbit = (f, k, point, {escape = false, fade = 1} = {}) => {
+  const colour = escape ? ink.red : ink.blue;
   const pts = orbitPath(f, k, point, null);
-  strokeOrbit(pts, pts.length - 1, 1, ink.blue);
+  strokeOrbit(pts, pts.length - 1, fade, colour);
+  ctx2d.globalAlpha = fade;
+  markPoint(point, colour, fade);
   ctx2d.globalAlpha = 1;
-  markPoint(point, ink.blue);
 };
 
 const drawOverlay = (now) => {
@@ -1331,7 +1333,7 @@ const loadHash = () => {
 
 const openSong = async () => {
   if (!cantus) {
-    cantusLoading ||= import('./cantus/show.js?v=24').then((m) =>
+    cantusLoading ||= import('./cantus/show.js?v=25').then((m) =>
       m.initShow({
         state,
         fractals,

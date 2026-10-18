@@ -879,6 +879,83 @@ body.show-on .cantus {
 .c-tracks option {
   background: #19191c;
 }
+/* the voices and, per part, its fractal, preferred period and a mute switch */
+.c-voices {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+}
+.c-parts {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.c-parts li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+.c-part {
+  font-size: 14px;
+}
+.c-where {
+  grid-column: 2 / 4;
+  font-size: 13px;
+  color: var(--paper-3);
+}
+.c-parts li.muted .c-part,
+.c-parts li.muted select,
+.c-parts li.muted .c-where {
+  opacity: 0.45;
+}
+.c-voices select,
+.c-parts select {
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--paper);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.c-voices select:focus-visible,
+.c-parts select:focus-visible,
+.c-mute:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.c-voices option,
+.c-parts option {
+  background: #19191c;
+}
+.c-mute {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--paper-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.c-mute[aria-pressed='true'] {
+  background: var(--paper);
+  color: var(--ink);
+}
+.c-notes[hidden] {
+  display: none;
+}
 .c-notes {
   margin-top: 12px !important;
   font-size: 13.5px;
@@ -1547,11 +1624,13 @@ body.show-on .hint {
     bottom: calc(var(--gap) + 96px);
     max-width: min(420px, calc(100vw - 2 * var(--gap) - 70px));
   }
-  /* during a song the readout sits above the transport bar, and it steps aside while the song panel is open */
+  /* during a song the readout sits above the transport bar; it and the fractal's card step aside while the song
+     panel is open, which can reach the top of the screen here */
   body.show-on .readout {
     bottom: calc(var(--gap) + 156px);
   }
-  body.song-panel .readout {
+  body.song-panel .readout,
+  body.song-panel .info {
     opacity: 0;
     pointer-events: none;
   }

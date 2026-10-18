@@ -17,7 +17,7 @@
       href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600&family=Source+Serif+4:ital,wght@1,400&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=24" />
+    <link rel="stylesheet" href="style.css?v=25" />
   </head>
   <body>
     <main id="stage">
@@ -148,12 +148,14 @@
     <!-- songs: choose a MIDI file, see its parts, play it -->
     <section id="cantus" class="card pop cantus" aria-label="Play a song">
       <h2>Play a song</h2>
-      <p class="lede">Choose a MIDI file and the Mandelbrot set plays its melody. Every note is a point whose orbit loops at that pitch. The file stays on your device.</p>
+      <p class="lede">Choose a MIDI file and fractals play it: the melody, the chords, the bass and the drums. Every note is a point whose orbit loops at that pitch. The file stays on your device.</p>
       <label class="c-file"><input id="c-file" type="file" accept=".mid,.midi,audio/midi" />Choose a MIDI file</label>
       <div id="c-song" class="c-song" hidden>
         <p id="c-title" class="c-title"></p>
         <p id="c-meta" class="c-meta"></p>
         <ul id="c-tracks" class="c-tracks"></ul>
+        <div class="c-voices"><label for="c-voices">Voices</label><select id="c-voices"></select></div>
+        <ul id="c-parts" class="c-parts" aria-label="Parts"></ul>
         <p id="c-notes" class="c-notes"></p>
         <button id="c-play" class="start">Play</button>
       </div>
@@ -196,6 +198,6 @@
       <div class="sheet"><h2>This browser cannot draw it.</h2><p>The explorer needs WebGL2. Try a current Chrome, Firefox, Safari or Edge.</p></div>
     </div>
 
-    <script type="module" src="src/main.js?v=24"></script>
+    <script type="module" src="src/main.js?v=25"></script>
   </body>
 </html>
