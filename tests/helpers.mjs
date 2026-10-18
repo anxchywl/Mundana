@@ -1,11 +1,24 @@
 // Shared helpers for the Node tests: render a voice offline, measure its pitch and its level.
+import {Master} from '../src/voice.js';
 
-/** render `seconds` of a Voice in blocks of 128 samples, as the audio thread does; returns {L, R} */
-export const renderVoice = (voice, seconds, sr) => {
+/**
+ * render `seconds` of a lone Voice through the master path in blocks of 128 samples, as the audio thread does;
+ * returns {L, R}. Pass `master` to go on from an earlier call.
+ */
+export const renderVoice = (voice, seconds, sr, master = new Master(sr)) => {
   const n = Math.round(seconds * sr);
   const L = new Float32Array(n);
   const R = new Float32Array(n);
-  for (let i = 0; i < n; i += 128) voice.render(L, R, i, Math.min(n, i + 128));
+  const mixL = new Float64Array(128);
+  const mixR = new Float64Array(128);
+  for (let i = 0; i < n; i += 128) {
+    const m = Math.min(128, n - i);
+    mixL.fill(0);
+    mixR.fill(0);
+    const on = voice.on;
+    voice.render(mixL, mixR, 0, m);
+    master.render(mixL, mixR, L.subarray(i, i + m), R.subarray(i, i + m), m, on || voice.on ? 1 : 0, voice.broke);
+  }
   return {L, R};
 };
 

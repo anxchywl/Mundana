@@ -5,9 +5,11 @@
 // heard around its own centre (the average of its last 32 points), at a loudness set by its own level, through a soft
 // saturator. A cycle of period p repeats rate / p times a second, so that is the pitch you hear.
 //
-// This is plain JavaScript with no audio API in it, so the audio worklet and Node (tests and tools) run the same code.
+// Voices are summed into one master path (Master, below): a gain for how many sound at once, one gentle high-pass and a
+// soft limit. This is plain JavaScript with no audio API in it, so the audio worklet and Node (tests and tools) run the
+// same code.
 
-import {fractals, orbitOf, ESCAPE_SQ, RATE, clampRate} from './fractals.js?v=24';
+import {fractals, ESCAPE_SQ, RATE, clampRate} from './fractals.js?v=24';
 
 const CENTRE_N = 32; // orbit points averaged to find the centre the sound swings around
 const TARGET = 0.3; // level the automatic gain aims for
@@ -17,6 +19,8 @@ const ATTACK_S = 0.004;
 const RELEASE_S = 0.015;
 const FADE_S = 0.6; // time for a fading note to fall to about a third
 const VELOCITY_DB = 30; // velocity 0 to 1 spans this many decibels
+const GAIN_S = 0.02; // how quickly the master gain follows the number of sounding voices
+const LIMIT = 0.9; // above this the master output is bent softly toward 1
 
 // Catmull-Rom through four values at t between the second and the third
 const curve = (a, b, c, d, t, t2, t3) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3);
@@ -31,12 +35,12 @@ export class Voice {
     this.rate = RATE;
     this.fading = true;
     this.julia = null;
-    this.c = [0, 0];
+    this.c = new Float64Array(2);
     this.next = [0, 0];
     // the four orbit points the curve runs through, as x0 y0 x1 y1 x2 y2 x3 y3; the sound is between points 1 and 2
     this.p = new Float64Array(8);
     this.ring = new Float64Array(CENTRE_N * 2);
-    this.ringSum = [0, 0];
+    this.ringSum = new Float64Array(2);
     this.ringI = 0;
     this.phase = 0;
     this.escaped = false;
@@ -46,8 +50,9 @@ export class Voice {
     this.decay = 1;
     this.release = 1;
     this.level = 0.05;
-    this.hp = [0, 0, 0, 0];
     this.velocityGain = 1;
+    // the sample of the last render where the sound broke (a NaN), or -1; the master path starts its filter afresh there
+    this.broke = -1;
     this.releaseS = RELEASE_S;
     // called when the orbit escapes; the worklet forwards it to the page
     this.onEscape = null;
@@ -89,10 +94,13 @@ export class Voice {
     if (o && Number.isFinite(o.releaseS)) this.releaseS = Math.min(2, Math.max(0.001, o.releaseS));
     const velocity = o && Number.isFinite(o.velocity) ? Math.min(1, Math.max(0, o.velocity)) : 1;
     this.velocityGain = velocity > 0 ? 10 ** (((velocity - 1) * VELOCITY_DB) / 20) : 0;
-    const orbit = orbitOf(this.f, point, this.julia);
-    const z0 = o && finitePair(o.z0) ? o.z0 : orbit.z0;
-    const c = orbit.c;
-    this.c = c;
+    // the same start and c as orbitOf, copied into this voice's own arrays, so a press allocates nothing
+    const julia = this.julia;
+    const z0 = o && finitePair(o.z0) ? o.z0 : julia ? point : this.f.start || point;
+    const from = julia || point;
+    const c = this.c;
+    c[0] = from[0];
+    c[1] = from[1];
     const p = this.p;
     p[0] = p[2] = z0[0];
     p[1] = p[3] = z0[1];
@@ -107,7 +115,8 @@ export class Voice {
       this.ring[i * 2] = p[2];
       this.ring[i * 2 + 1] = p[3];
     }
-    this.ringSum = [p[2] * CENTRE_N, p[3] * CENTRE_N];
+    this.ringSum[0] = p[2] * CENTRE_N;
+    this.ringSum[1] = p[3] * CENTRE_N;
     this.ringI = 0;
     this.phase = 0;
     if (!this.on || this.release < 1) this.attack = 0;
@@ -133,7 +142,8 @@ export class Voice {
     const p = this.p;
     p.copyWithin(0, 2);
     this.f.step(p[4], p[5], this.c[0], this.c[1], this.next, this.k);
-    const [x, y] = this.next;
+    const x = this.next[0];
+    const y = this.next[1];
     if (!(x * x + y * y <= ESCAPE_SQ)) {
       // the orbit left: hold its last point and let the sound release
       this.escaped = true;
@@ -153,13 +163,14 @@ export class Voice {
     this.ringI = (this.ringI + 1) % CENTRE_N;
   }
 
-  /** write samples `from` to `to` (not included) of L and R */
+  /** add samples `from` to `to` (not included) to L and R, the float64 mix of the master path */
   render(L, R, from, to) {
     const sr = this.sr;
     const inc = this.rate / sr;
     const followLevel = 1 - Math.exp(-1 / (LEVEL_S * sr));
     const fadeStep = Math.exp(-1 / (FADE_S * sr));
     const p = this.p;
+    this.broke = -1;
     for (let i = from; i < to; i++) {
       let l = 0;
       let r = 0;
@@ -195,18 +206,53 @@ export class Voice {
       if (!Number.isFinite(l) || !Number.isFinite(r)) {
         l = r = 0;
         this.on = false;
-        this.hp.fill(0);
+        this.broke = i;
       }
-      L[i] = this.block(0, l);
-      R[i] = this.block(2, r);
+      L[i] += l;
+      R[i] += r;
     }
   }
+}
 
-  /** a gentle high-pass, so a still point sits at zero */
-  block(j, v) {
-    const y = v - this.hp[j] + 0.9995 * this.hp[j + 1];
-    this.hp[j] = v;
-    this.hp[j + 1] = y;
-    return y;
+const soft = (v) => (v > LIMIT ? LIMIT + (1 - LIMIT) * Math.tanh((v - LIMIT) / (1 - LIMIT)) : v < -LIMIT ? -LIMIT + (1 - LIMIT) * Math.tanh((v + LIMIT) / (1 - LIMIT)) : v);
+
+/**
+ * The master path: the voices' sum times 1 / sqrt(n) for n sounding voices (eased over 20 ms, so it never clicks),
+ * then one gentle high-pass, so a still point sits at zero, then a soft limit above 0.9, so no sample passes 1. With
+ * one voice the gain is exactly 1 and the limit is not reached by a lone voice's level, so one voice sounds as before.
+ */
+export class Master {
+  constructor(sampleRate) {
+    this.gain = 1;
+    this.follow = 1 - Math.exp(-1 / (GAIN_S * sampleRate));
+    this.hp = new Float64Array(4);
+  }
+
+  /**
+   * write `len` samples of outL and outR from the mix; `voices` is how many sounded in this block, `reset` the sample
+   * where a voice broke (the filter starts from zero there, as it always has) or -1
+   */
+  render(mixL, mixR, outL, outR, len, voices, reset = -1) {
+    const target = 1 / Math.sqrt(Math.max(1, voices));
+    const hp = this.hp;
+    let g = this.gain;
+    for (let i = 0; i < len; i++) {
+      if (g !== target) {
+        g += (target - g) * this.follow;
+        if (Math.abs(target - g) < 1e-7) g = target;
+      }
+      if (i === reset) hp.fill(0);
+      const l = mixL[i] * g;
+      const r = mixR[i] * g;
+      const yl = l - hp[0] + 0.9995 * hp[1];
+      hp[0] = l;
+      hp[1] = yl;
+      const yr = r - hp[2] + 0.9995 * hp[3];
+      hp[2] = r;
+      hp[3] = yr;
+      outL[i] = soft(yl);
+      outR[i] = soft(yr);
+    }
+    this.gain = g;
   }
 }

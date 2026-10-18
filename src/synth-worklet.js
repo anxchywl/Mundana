@@ -1,14 +1,18 @@
-// The audio thread's side of the instrument: a thin host around one Voice (src/voice.js), which holds the sound
-// itself. It forwards the page's messages to the voice and tells the page when the orbit escapes.
+// The audio thread's side of the instrument: a thin host around a pool of Voices (src/voice.js), which hold the sound
+// itself, summed into one Master path. Voice 0 is the one you play by hand: the page's messages without a `voice` go
+// to it, and it tells the page when its orbit escapes.
 //
 // A song sends timed messages as well: `press` and `release` carry `at`, a time on the AudioContext clock, and start
-// on that exact sample; `clear` forgets everything pending and lets every voice go. They wait in a ring per voice,
-// allocated here, so the audio callback never allocates.
+// on that exact sample; `clear` forgets everything pending and lets every voice go; `voices {n}` sets how many voices
+// a song may use. Timed events wait in a ring per voice. Everything is allocated here, so the audio callback never
+// allocates, and a voice that is not sounding is skipped before any work per sample.
 
-import {Voice} from './voice.js?v=24';
+import {Voice, Master} from './voice.js?v=24';
 import {fractals, paramOf} from './fractals.js?v=24';
 
-const VOICES = 1;
+const MAX_VOICES = 6;
+const DEFAULT_VOICES = 4;
+const BLOCK = 128;
 const RING = 256;
 const PRESS = 1;
 const RELEASE = 2;
@@ -34,17 +38,22 @@ class Ring {
     this.num.copyWithin(to * 9, from * 9, from * 9 + 9);
   }
 
-  /** a free slot at the back, moved forward past later events (ties keep their arrival order); returns its index */
-  push(frame) {
+  /**
+   * a free slot at the back, moved forward past later events, and past presses on the same sample if this is a
+   * release, so a note that ends where the next begins never ends the new one; other ties keep their arrival order.
+   * Returns its index, with its kind set.
+   */
+  push(frame, kind) {
     let i = (this.head + this.size) % RING;
     this.size++;
     for (let n = this.size - 1; n > 0; n--) {
       const before = (i - 1 + RING) % RING;
-      if (this.frame[before] <= frame) break;
+      if (this.frame[before] < frame || (this.frame[before] === frame && (kind !== RELEASE || this.kind[before] !== PRESS))) break;
       this.copy(before, i);
       i = before;
     }
     this.frame[i] = frame;
+    this.kind[i] = kind;
     return i;
   }
 
@@ -60,10 +69,14 @@ const pair = (v) => Array.isArray(v) && v.length === 2 && Number.isFinite(v[0]) 
 class OrbitVoice extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.voice = new Voice(sampleRate);
+    this.voices = Array.from({length: MAX_VOICES}, () => new Voice(sampleRate));
+    this.voice = this.voices[0];
     this.voice.onEscape = () => this.port.postMessage({type: 'escaped'});
-    this.voices = [this.voice];
     this.rings = this.voices.map(() => new Ring());
+    this.count = DEFAULT_VOICES;
+    this.master = new Master(sampleRate);
+    this.mixL = new Float64Array(BLOCK);
+    this.mixR = new Float64Array(BLOCK);
     this.overflowed = false;
     // reused for every press, so applying one allocates nothing here
     this.point = [0, 0];
@@ -77,12 +90,24 @@ class OrbitVoice extends AudioWorkletProcessor {
     if (m.type === 'press') this.press(m);
     else if (m.type === 'release') this.release(m);
     else if (m.type === 'clear') this.clear();
-    else this.voice.message(m);
+    else if (m.type === 'voices') this.setCount(m.n);
+    else if (m.voice === undefined) this.voice.message(m);
+    else if (Number.isInteger(m.voice) && m.voice >= 0 && m.voice < MAX_VOICES) this.voices[m.voice].message(m);
+  }
+
+  /** how many voices a song may use, 1 to 6; voices past the new count are let go */
+  setCount(n) {
+    if (!Number.isInteger(n) || n < 1 || n > MAX_VOICES) return;
+    this.count = n;
+    for (let v = n; v < MAX_VOICES; v++) {
+      this.rings[v].size = 0;
+      this.voices[v].stop();
+    }
   }
 
   ringFor(m) {
     const v = m.voice ?? 0;
-    return Number.isInteger(v) && v >= 0 && v < VOICES && Number.isFinite(m.at) ? this.rings[v] : null;
+    return Number.isInteger(v) && v >= 0 && v < this.count && Number.isFinite(m.at) ? this.rings[v] : null;
   }
 
   /** make room in a full ring by dropping its oldest event, and say so once */
@@ -101,8 +126,7 @@ class OrbitVoice extends AudioWorkletProcessor {
     const index = fractals.findIndex((f) => f.key === m.fractal);
     if (!ring || index < 0 || !pair(m.p) || !Number.isFinite(m.rate)) return;
     this.room(ring);
-    const i = ring.push(Math.round(m.at * sampleRate));
-    ring.kind[i] = PRESS;
+    const i = ring.push(Math.round(m.at * sampleRate), PRESS);
     ring.fractal[i] = index;
     ring.hasZ0[i] = pair(m.z0) ? 1 : 0;
     const n = ring.num;
@@ -122,7 +146,7 @@ class OrbitVoice extends AudioWorkletProcessor {
     const ring = this.ringFor(m);
     if (!ring) return;
     this.room(ring);
-    ring.kind[ring.push(Math.round(m.at * sampleRate))] = RELEASE;
+    ring.push(Math.round(m.at * sampleRate), RELEASE);
   }
 
   clear() {
@@ -166,25 +190,42 @@ class OrbitVoice extends AudioWorkletProcessor {
     const L = outputs[0][0];
     const R = outputs[0][1] || L;
     const len = L.length;
-    for (let v = 0; v < VOICES; v++) {
+    // a render quantum of another size (none today) gets mix buffers of its size once, not every block
+    if (this.mixL.length < len) {
+      this.mixL = new Float64Array(len);
+      this.mixR = new Float64Array(len);
+    }
+    const mixL = this.mixL;
+    const mixR = this.mixR;
+    mixL.fill(0, 0, len);
+    mixR.fill(0, 0, len);
+    // currentFrame is the first sample of this block; an event already past starts on the first sample
+    const first = currentFrame;
+    let sounding = 0;
+    let reset = -1;
+    for (let v = 0; v < MAX_VOICES; v++) {
       const voice = this.voices[v];
       const ring = this.rings[v];
-      if (!ring.size) {
-        voice.render(L, R, 0, len);
-        continue;
-      }
-      // currentFrame is the first sample of this block; an event already past starts on the first sample
-      const first = currentFrame;
+      const due = ring.size > 0 && ring.frame[ring.head] < first + len;
+      if (!voice.on && !due) continue;
       let pos = 0;
       while (ring.size && ring.frame[ring.head] < first + len) {
         const at = Math.max(pos, ring.frame[ring.head] - first);
-        if (at > pos) voice.render(L, R, pos, at);
+        if (at > pos && voice.on) {
+          voice.render(mixL, mixR, pos, at);
+          if (voice.broke >= 0) reset = voice.broke;
+        }
         pos = at;
         this.apply(v, ring);
         ring.shift();
       }
-      if (pos < len) voice.render(L, R, pos, len);
+      if (pos < len && voice.on) {
+        voice.render(mixL, mixR, pos, len);
+        if (voice.broke >= 0) reset = voice.broke;
+      }
+      sounding++;
     }
+    this.master.render(mixL, mixR, L, R, len, sounding, reset);
     return true;
   }
 }

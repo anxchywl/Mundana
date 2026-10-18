@@ -6,7 +6,7 @@
 // exactly halfway round and are heard an octave up, and those would play the wrong note.
 import {fractals, orbitOf, analyse, paramOf} from '../src/fractals.js';
 import {Voice} from '../src/voice.js';
-import {pitchOf} from '../tests/helpers.mjs';
+import {pitchOf, renderVoice} from '../tests/helpers.mjs';
 import {Worker, isMainThread, parentPort} from 'node:worker_threads';
 import {createHash} from 'node:crypto';
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
@@ -41,10 +41,7 @@ export const listen = (i, k, point, z0, rate = RATE, seconds = 0.5) => {
   v.message({type: 'sustain', on: true});
   v.message({type: 'rate', value: rate});
   v.start(point, z0 ? {z0} : undefined);
-  const n = Math.round(SR * seconds);
-  const L = new Float32Array(n);
-  const R = new Float32Array(n);
-  for (let j = 0; j < n; j += 128) v.render(L, R, j, Math.min(n, j + 128));
+  const {L, R} = renderVoice(v, seconds, SR);
   const skip = SR * 0.05;
   return [L.subarray(skip), R.subarray(skip)];
 };

@@ -7,7 +7,7 @@ import {fractals} from '../src/fractals.js';
 import {Voice} from '../src/voice.js';
 import {engineHash, PERIODS} from '../tools/build-points.mjs';
 import {indexPoints, loadPoints, periodsOf} from '../src/cantus/points.js';
-import {pitchOf} from './helpers.mjs';
+import {pitchOf, renderVoice} from './helpers.mjs';
 
 const FILE = new URL('../src/cantus/points.json', import.meta.url);
 const text = readFileSync(FILE, 'utf8');
@@ -65,10 +65,7 @@ test('every cycle point plays 440 Hz within 1 percent at rate 440 x period', (t)
       v.message({type: 'fractal', index: i, param: e.param});
       v.message({type: 'sustain', on: true});
       v.start([x, y], {z0: [zx, zy], rate: 440 * period});
-      const n = SR * 0.25;
-      const L = new Float32Array(n);
-      const R = new Float32Array(n);
-      for (let j = 0; j < n; j += 128) v.render(L, R, j, j + 128);
+      const {L, R} = renderVoice(v, 0.25, SR);
       const skip = SR * 0.05;
       const hz = pitchOf([L.subarray(skip), R.subarray(skip)], SR, {minHz: 100, maxHz: 2000});
       const err = Math.abs(hz / 440 - 1);
