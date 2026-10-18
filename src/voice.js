@@ -7,7 +7,7 @@
 //
 // This is plain JavaScript with no audio API in it, so the audio worklet and Node (tests and tools) run the same code.
 
-import {fractals, orbitOf, ESCAPE_SQ, RATE, clampRate} from './fractals.js?v=23';
+import {fractals, orbitOf, ESCAPE_SQ, RATE, clampRate} from './fractals.js?v=24';
 
 const CENTRE_N = 32; // orbit points averaged to find the centre the sound swings around
 const TARGET = 0.3; // level the automatic gain aims for

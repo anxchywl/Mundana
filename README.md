@@ -29,6 +29,20 @@ move along their orbits, music no one can hear. Here you can.
 On a computer you can also use the keyboard: `G` gallery, `X` random, `J` Julia set, `C` colours, `W` save the sound,
 `R` reset the view.
 
+## Play a song
+
+Mundana can also play a song. Press the music note button next to the round button (bottom left on a phone) and
+choose a MIDI file. The Mandelbrot set plays its melody: each note is a point whose orbit loops at that pitch, and you
+see each orbit as it sounds. Play, pause, seek and stop from the bar at the bottom. Pressing the picture, switching
+fractal or hiding the tab pauses the song; press play to carry on where it stopped.
+
+The panel lists every track of the file with the part it plays (melody, bass, chords or drums), and you can change
+it. For now only the melody plays, one note at a time, on one fractal with the camera still. The file is read in your
+browser and never leaves your device.
+
+Limits: MIDI files up to 4 MB, songs up to 10 minutes and 20,000 notes. Notes shorter than 40 ms are joined to the
+next or dropped, and notes too high or too low move by whole octaves; the panel says how many.
+
 ## What's inside
 
 - **24 fractals in four families:** the Mandelbrot set and its cousins, the burning ship family, chaotic maps from
@@ -36,6 +50,7 @@ On a computer you can also use the keyboard: `G` gallery, `X` random, `J` Julia 
 - **Smooth morphing** between fractals: every frame of the change is a real fractal in between
 - **Julia sets**, three colour styles, and a pitch control
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
+- **Play a song** from a MIDI file, its melody played by the Mandelbrot set
 - **Works on phones:** one finger plays, two fingers move and zoom
 
 ## Run it yourself
@@ -58,6 +73,8 @@ The tests need Node 22 or newer and nothing else:
 node --test tests/*.test.mjs
 ```
 
+The small MIDI files the tests read are written by `node tools/make-midi-fixtures.mjs`.
+
 ## How it works
 
 Everything happens in your browser, in plain JavaScript with no libraries.
@@ -71,6 +88,11 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 | [`src/main.js`](src/main.js) | Everything you touch: zoom, gallery, random, saving and links |
 | [`src/spots.js`](src/spots.js) | Points known to sound good, found by [`tools/find-spots.mjs`](tools/find-spots.mjs) |
 | [`src/cantus/points.js`](src/cantus/points.js) | Loads the point library: stable points for every note of every fractal, built by [`tools/build-points.mjs`](tools/build-points.mjs) |
+| [`src/cantus/midi.js`](src/cantus/midi.js) | Reads MIDI files: notes, tempo, time signatures, and which track plays which part |
+| [`src/cantus/timeline.js`](src/cantus/timeline.js) | The song as notes in time, with its checks and limits |
+| [`src/cantus/mapper.js`](src/cantus/mapper.js) | Gives every note a point and a speed that play it |
+| [`src/cantus/scheduler.js`](src/cantus/scheduler.js) | Sends each note to the audio thread just ahead of time, on the audio clock: play, pause, seek, loop |
+| [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song |
 
 Want to add a fractal? Add it to `src/fractals.js` with both formulas, then run `node tools/find-spots.mjs` and copy
 its spots into `src/spots.js`. After any change to a formula or to `src/voice.js`, run `node tools/build-points.mjs`

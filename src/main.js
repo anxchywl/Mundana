@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=23';
-import {spots} from './spots.js?v=23';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=23';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=24';
+import {spots} from './spots.js?v=24';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=24';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -104,12 +104,21 @@ const panBy = (dxPx, dyPx) => {
   saveHash();
 };
 
+// ---------- song mode: hooks ----------
+
+// Cantus, the song mode (src/cantus/show.js), loads the first time the music button is pressed. Until then these
+// hooks do nothing, so manual playing runs exactly the same code as before.
+let cantus = null;
+let cantusLoading = null;
+let showSwitching = false; // the show itself is switching fractal, so it does not pause
+const interruptShow = () => cantus?.interrupt();
+
 // ---------- sound ----------
 
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=23', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=24', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -164,6 +173,7 @@ const startAudio = async () => {
 // a hidden tab keeps no audio thread awake
 document.addEventListener('visibilitychange', () => {
   if (!audio) return;
+  if (document.hidden) interruptShow();
   if (document.hidden) audio.ctx.suspend().catch(() => {});
   else if (state.playing) audio.ctx.resume().catch(() => {});
 });
@@ -211,6 +221,7 @@ const stop = () => {
 // ---------- fractal and modes ----------
 
 const setFractal = (i, keepView = false, morph = true) => {
+  if (!showSwitching) interruptShow();
   const next = (i + fractals.length) % fractals.length;
   // morph from what is on screen now; a switch during a switch starts from the fractal it was heading to
   if (morph && MORPH_MS > 0 && next !== state.type && !keepView) {
@@ -255,6 +266,7 @@ const setParam = (v) => {
 const decimals = (step) => Math.max(0, Math.ceil(-Math.log10(step)));
 
 const setJulia = (c) => {
+  interruptShow();
   state.julia = c;
   send({type: 'julia', c});
   frame = 0;
@@ -625,6 +637,7 @@ const makeThumbs = () => {
 
 const galleryOpen = () => $('#gallery').classList.contains('open');
 const toggleGallery = (open = !galleryOpen()) => {
+  if (open) interruptShow();
   $('#gallery').classList.toggle('open', open);
   dimForSheets();
   if (!open) return;
@@ -691,24 +704,12 @@ const dot = (x, y, r, col) => {
   ctx2d.fill();
 };
 
-const drawOverlay = (now) => {
-  ctx2d.clearRect(0, 0, W, H);
-  if (state.julia && (state.picking || !state.point)) {
-    // the chosen c, as a dashed ring
-    const [sx, sy] = toScreen(state.julia[0], state.julia[1]);
-    ring(sx, sy, 14, ink.stone, 0.75);
-    dot(sx, sy, 3, ink.paper);
-  }
-  if (!state.point) return;
-  const f = cur();
-  const k = kOf();
-  const {z0, c} = orbitOf(f, state.point, state.julia);
+/** a point's orbit on screen: from where the orbit starts, so the spiral into its cycle (the star) stays on screen,
+ * for 200 steps or until it escapes */
+const orbitPath = (f, k, point, julia) => {
+  const {z0, c} = orbitOf(f, point, julia);
   const out = [0, 0];
-  // the path from where the orbit starts, so the spiral into its cycle (the star) stays on screen
   let [x, y] = z0;
-  // with dampening on, the drawn orbit dims as the note dies, but never so far that it cannot be read
-  const age = (now - state.playedAt) / 1000;
-  const fade = !state.playing || state.sustain ? 1 : Math.max(0.55, Math.pow(0.9992, age * state.rate));
   const pts = [toScreen(x, y)];
   for (let i = 0; i < 200; i++) {
     f.step(x, y, c[0], c[1], out, k);
@@ -718,6 +719,63 @@ const drawOverlay = (now) => {
     pts.push([Math.max(-1e4, Math.min(1e4, sx)), Math.max(-1e4, Math.min(1e4, sy))]);
     if (!(x * x + y * y <= ESCAPE_SQ)) break;
   }
+  return pts;
+};
+
+/** the path up to point `shown`, in a colour over a keyline */
+const strokeOrbit = (pts, shown, fade, colour) => {
+  const path = () => {
+    ctx2d.beginPath();
+    ctx2d.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i <= shown; i++) ctx2d.lineTo(pts[i][0], pts[i][1]);
+  };
+  ctx2d.lineJoin = 'round';
+  ctx2d.lineCap = 'round';
+  // a keyline in the ground colour under the path, so it reads over light orbit colours as well as dark ground
+  ctx2d.globalAlpha = 0.55 * fade;
+  ctx2d.lineWidth = 4;
+  ctx2d.strokeStyle = ink.ground;
+  path();
+  ctx2d.stroke();
+  ctx2d.globalAlpha = fade;
+  ctx2d.lineWidth = 2;
+  ctx2d.strokeStyle = colour;
+  path();
+  ctx2d.stroke();
+};
+
+/** the pressed point: a dashed ring around a dot */
+const markPoint = (p, colour) => {
+  const [px, py] = toScreen(p[0], p[1]);
+  ring(px, py, 14, ink.stone, 0.75);
+  dot(px, py, 3.5, colour);
+};
+
+/** a sounding orbit of a song: the whole path, in blue, and its point */
+const drawOrbit = (f, k, point) => {
+  const pts = orbitPath(f, k, point, null);
+  strokeOrbit(pts, pts.length - 1, 1, ink.blue);
+  ctx2d.globalAlpha = 1;
+  markPoint(point, ink.blue);
+};
+
+const drawOverlay = (now) => {
+  ctx2d.clearRect(0, 0, W, H);
+  if (state.julia && (state.picking || !state.point)) {
+    // the chosen c, as a dashed ring
+    const [sx, sy] = toScreen(state.julia[0], state.julia[1]);
+    ring(sx, sy, 14, ink.stone, 0.75);
+    dot(sx, sy, 3, ink.paper);
+  }
+  if (cantus?.playing()) {
+    cantus.draw(now);
+    return;
+  }
+  if (!state.point) return;
+  // with dampening on, the drawn orbit dims as the note dies, but never so far that it cannot be read
+  const age = (now - state.playedAt) / 1000;
+  const fade = !state.playing || state.sustain ? 1 : Math.max(0.55, Math.pow(0.9992, age * state.rate));
+  const pts = orbitPath(cur(), kOf(), state.point, state.julia);
   // slow motion: the orbit replays a step at a time, from about 4 steps a second and speeding up, then pauses and
   // starts over. You can watch it settle into the cycle you hear, and count its period on the step counter
   let shown = pts.length - 1;
@@ -737,25 +795,8 @@ const drawOverlay = (now) => {
       }
     } else shown = n;
   }
-  const path = (from = 0) => {
-    ctx2d.beginPath();
-    ctx2d.moveTo(pts[from][0], pts[from][1]);
-    for (let i = from + 1; i <= shown; i++) ctx2d.lineTo(pts[i][0], pts[i][1]);
-  };
-  ctx2d.lineJoin = 'round';
-  ctx2d.lineCap = 'round';
-  // a keyline in the ground colour under the path, so it reads over light orbit colours as well as dark ground
-  ctx2d.globalAlpha = 0.55 * fade;
-  ctx2d.lineWidth = 4;
-  ctx2d.strokeStyle = ink.ground;
-  path();
-  ctx2d.stroke();
-  ctx2d.globalAlpha = fade;
-  ctx2d.lineWidth = 2;
   const escapes = state.info?.kind === 'escape';
-  ctx2d.strokeStyle = escapes ? ink.red : ink.blue;
-  path();
-  ctx2d.stroke();
+  strokeOrbit(pts, shown, fade, escapes ? ink.red : ink.blue);
   if (state.animate) {
     // the hop in progress is drawn bright, and the point glides along it with its step number
     const [ax, ay] = pts[shown];
@@ -776,14 +817,13 @@ const drawOverlay = (now) => {
     ctx2d.fillText(String(shown), hx + 13, hy - 9);
   }
   ctx2d.globalAlpha = 1;
-  const [px, py] = toScreen(state.point[0], state.point[1]);
-  ring(px, py, 14, ink.stone, 0.75);
-  dot(px, py, 3.5, escapes ? ink.red : ink.blue);
+  markPoint(state.point, escapes ? ink.red : ink.blue);
 };
 
 const tick = (now) => {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (cantus?.playing()) cantus.frame(now);
   // ease toward the destination, frame-rate independent
   const e = 1 - Math.pow(0.8, dt * 60);
   const v = state.view;
@@ -875,6 +915,7 @@ const local = (e) => {
 };
 
 stage.addEventListener('pointerdown', (e) => {
+  interruptShow();
   startAudio();
   closeSettings();
   closeSettings();
@@ -1045,24 +1086,27 @@ const toggleAnimate = () => {
 // settings (bottom right) and about (bottom left) are popovers: one open at a time, anything else closes them
 const toggleSettings = (open = !$('#settings').classList.contains('open')) => {
   if (open) toggleAbout(false);
+  if (open) cantus?.closePanel();
   $('#settings').classList.toggle('open', open);
   $$('.settings-btn').forEach((b) => b.classList.toggle('on', open));
   dimForSheets();
 };
 const toggleAbout = (open = !$('#about').classList.contains('open')) => {
   if (open) toggleSettings(false);
+  if (open) cantus?.closePanel();
   $('#about').classList.toggle('open', open);
   $('.about-btn').classList.toggle('on', open);
   dimForSheets();
 };
 // on a phone an open sheet dims the picture behind it
 const dimForSheets = () => {
-  const open = $('#settings').classList.contains('open') || $('#about').classList.contains('open') || galleryOpen();
+  const open = $('#settings').classList.contains('open') || $('#about').classList.contains('open') || $('#cantus').classList.contains('open') || galleryOpen();
   document.body.classList.toggle('sheet-open', open && !desktop());
 };
 const closeSettings = () => {
   toggleSettings(false);
   toggleAbout(false);
+  cantus?.closePanel();
 };
 
 /** a random fractal and one of its sound spots: the switch morphs while the dashed ring turns, then the spot plays */
@@ -1119,6 +1163,7 @@ const actions = {
   about: () => toggleAbout(),
   stop,
   start,
+  song: () => openSong(),
   'param-default': () => {
     setParam(cur().param.value);
     renderParam();
@@ -1131,7 +1176,7 @@ document.addEventListener('click', (e) => {
     if (!e.target.closest('.pop')) closeSettings();
     return;
   }
-  if (!b.closest('.pop') && b.dataset.act !== 'settings' && b.dataset.act !== 'about') closeSettings();
+  if (!b.closest('.pop') && !['settings', 'about', 'song'].includes(b.dataset.act)) closeSettings();
   if (b.dataset.colour) setColour(Number(b.dataset.colour));
   else actions[b.dataset.act]?.();
 });
@@ -1280,6 +1325,48 @@ const loadHash = () => {
   }
   syncUI();
   return true;
+};
+
+// ---------- songs ----------
+
+const openSong = async () => {
+  if (!cantus) {
+    cantusLoading ||= import('./cantus/show.js?v=24').then((m) =>
+      m.initShow({
+        state,
+        fractals,
+        send,
+        startAudio,
+        audio: () => audio,
+        setupMessages,
+        toast,
+        closeSettings,
+        dimForSheets,
+        desktop,
+        drawOrbit,
+        hideLimit: () => ($('#limit').hidden = true),
+        /** switch to a fractal for the show, without pausing it and without a morph */
+        showFractal: (key) => {
+          const i = fractals.findIndex((f) => f.key === key);
+          showSwitching = true;
+          try {
+            setFractal(i, false, false);
+          } finally {
+            showSwitching = false;
+          }
+        },
+      }),
+    );
+    try {
+      cantus = await cantusLoading;
+    } catch (e) {
+      console.warn(e);
+      cantusLoading = null;
+      toast('Songs could not load. Try reloading the page.');
+      return;
+    }
+  }
+  cantus.togglePanel();
 };
 
 // ---------- start ----------
