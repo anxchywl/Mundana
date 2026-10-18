@@ -61,3 +61,14 @@ export const pitchOf = (signal, sr, {minHz = 30, maxHz = 10000, near = 0.9} = {}
   }
   return 0;
 };
+
+/**
+ * The first sample in [from, to) where a voice starts. A silent voice's output is the tail of its high-pass, which
+ * shrinks by exactly 0.9995 a sample, so the onset is the first sample that breaks that rule. Returns -1 if none.
+ */
+export const onsetIn = (x, from, to, tol = 1e-6) => {
+  for (let i = Math.max(1, from); i < Math.min(to, x.length); i++) {
+    if (Math.abs(x[i] - 0.9995 * x[i - 1]) > tol) return i;
+  }
+  return -1;
+};
