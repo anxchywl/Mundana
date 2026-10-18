@@ -2,13 +2,14 @@
 // Timeline (src/cantus/timeline.js). A file is untrusted input, so every read is bounded by its chunk and by the
 // buffer, and every count is capped.
 
-import {validateTimeline, mergeShort, barsFrom, cleanTitle, MAX_BEATS, MAX_NOTES} from './timeline.js?v=25';
+import {validateTimeline, mergeShort, barsFrom, findSections, cleanTitle, MAX_BEATS, MAX_NOTES} from './timeline.js?v=25';
 
 export const MAX_BYTES = 4 * 1024 * 1024;
 export const MAX_TRACKS = 256;
 export const MAX_EVENTS = 1000000;
 const HOLD_CAP = 8; // a note that never ends stops at its track's end, and after 8 s at most
 const DEFAULT_TEMPO = 500000; // microseconds a quarter note, 120 bpm
+const TEMPO_SPLIT = 0.08; // a tempo change of more than 8 percent starts a new section
 
 // General MIDI percussion keys, by the drum that plays them
 const KICK = new Set([35, 36]);
@@ -371,12 +372,25 @@ export const parseMidi = (buffer, fileName = '') => {
     for (const [us, len] of held) if (len > best || (len === best && 60e6 / us > bpm)) [best, bpm] = [len, 60e6 / us];
   }
 
+  // sections start where the time signature or the tempo changes, and where the music changes
+  const splits = [];
+  for (let s = 1; s < sigList.length; s++) {
+    const a = sigList[s - 1];
+    const b = sigList[s];
+    if (b.tick > a.tick && (a.num !== b.num || a.den !== b.den)) splits.push(clock.sec(b.tick));
+  }
+  for (let s = 1; s < clock.segments.length; s++) {
+    if (Math.abs(clock.segments[s - 1].us / clock.segments[s].us - 1) > TEMPO_SPLIT) splits.push(clock.segments[s].sec);
+  }
+  const bars = barsFrom(beats, sigTimes);
+  const sorted = merged.notes.slice().sort((a, b2) => a.start - b2.start);
+
   const title = tracks[0].name || cleanTitle(String(fileName).replace(/\.[^.]*$/, '')) || 'Untitled';
   const timeline = validateTimeline({
     notes: merged.notes,
     tempo: {bpm, beats},
-    bars: barsFrom(beats, sigTimes),
-    sections: [{start: 0, end: duration, label: 'Song'}],
+    bars,
+    sections: findSections(sorted, bars, {duration, splits}),
     duration,
     title,
     tracks: info.map((u, i) => ({name: u.name, channel: u.channel, program: u.program, notes: counts[i], ...parts[i]})),

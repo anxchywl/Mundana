@@ -177,3 +177,100 @@ export const beatToTime = (b, beats) => {
   const i = Math.max(0, Math.min(beats.length - 2, Math.floor(b)));
   return beats[i] + (b - i) * (beats[i + 1] - beats[i]);
 };
+
+/** how sections are found: windows of 4 bars, sections of 8 bars or more, at most 16 */
+export const SECTION = {window: 4, minBars: 8, max: 16, split: 0.75, same: 0.9};
+
+const cosine = (a, b) => {
+  let ab = 0;
+  let aa = 0;
+  let bb = 0;
+  for (let i = 0; i < a.length; i++) {
+    ab += a[i] * b[i];
+    aa += a[i] * a[i];
+    bb += b[i] * b[i];
+  }
+  if (!aa && !bb) return 1;
+  return aa && bb ? ab / Math.sqrt(aa * bb) : 0;
+};
+
+/** the pitch classes sounding in [from, to), each weighted by how long it sounds there; drums have no pitch */
+const histogram = (notes, from, to) => {
+  const h = new Float64Array(12);
+  for (const n of notes) {
+    if (n.start >= to) break;
+    if (n.part === 'drums') continue;
+    const len = Math.min(to, n.start + n.duration) - Math.max(from, n.start);
+    if (len > 0) h[((Math.round(n.midi) % 12) + 12) % 12] += len;
+  }
+  return h;
+};
+
+/**
+ * The sections of a song, from its notes (sorted by start) and its bar lines. `splits` are times where a section
+ * must start if it can (time signature and tempo changes); they snap to the nearest bar line. Elsewhere a section
+ * starts on a 4 bar window whose sound differs from the window before: the cosine of their pitch class histograms,
+ * times the ratio of their note densities, is under 0.75. Sections are at least 8 bars long and at most 16; the
+ * strongest boundaries are kept. Labels are letters, and a section whose histogram matches an earlier one with a
+ * cosine of 0.9 or more takes its letter. Returns [{start, end, label}].
+ */
+export const findSections = (notes, bars = [], {duration, splits = []} = {}) => {
+  const end = Number.isFinite(duration) ? duration : notes.reduce((m, n) => Math.max(m, n.start + n.duration), 0);
+  const nBars = bars.length;
+  const barTime = (i) => (i <= 0 ? 0 : i >= nBars ? end : bars[i]);
+  const candidates = [];
+  // hard splits first, in time order, then the window changes from the strongest
+  for (const t of splits) {
+    if (!(t > 0) || nBars < 2) continue;
+    let best = 0;
+    for (let i = 1; i < nBars; i++) if (Math.abs(bars[i] - t) < Math.abs(bars[best] - t)) best = i;
+    candidates.push({bar: best, strength: -Infinity});
+  }
+  const W = SECTION.window;
+  const windows = [];
+  for (let b = 0; b < nBars; b += W) {
+    const from = barTime(b);
+    const to = barTime(b + W);
+    if (!(to > from)) break;
+    let count = 0;
+    for (const n of notes) {
+      if (n.start >= to) break;
+      if (n.start >= from) count++;
+    }
+    windows.push({bar: b, h: histogram(notes, from, to), density: count / (to - from)});
+  }
+  for (let i = 1; i < windows.length; i++) {
+    const a = windows[i - 1];
+    const b = windows[i];
+    const ratio = Math.max(a.density, b.density) > 0 ? Math.min(a.density, b.density) / Math.max(a.density, b.density) : 1;
+    const sim = cosine(a.h, b.h) * ratio;
+    if (sim < SECTION.split) candidates.push({bar: b.bar, strength: sim});
+  }
+  candidates.sort((a, b) => a.strength - b.strength || a.bar - b.bar);
+  const kept = [];
+  for (const c of candidates) {
+    if (kept.length >= SECTION.max - 1) break;
+    if (c.bar < SECTION.minBars || c.bar > nBars - SECTION.minBars) continue;
+    if (kept.some((k) => Math.abs(k - c.bar) < SECTION.minBars)) continue;
+    kept.push(c.bar);
+  }
+  kept.sort((a, b) => a - b);
+  const starts = [0, ...kept];
+  const sections = starts.map((b, i) => ({start: barTime(b), end: i + 1 < starts.length ? barTime(starts[i + 1]) : end, label: ''}));
+  // labels: a section like an earlier one takes its letter
+  const hs = sections.map((s) => histogram(notes, s.start, s.end));
+  let next = 0;
+  sections.forEach((s, i) => {
+    let best = -1;
+    let bestCos = SECTION.same;
+    for (let j = 0; j < i; j++) {
+      const c = cosine(hs[i], hs[j]);
+      if (c >= bestCos) {
+        bestCos = c;
+        best = j;
+      }
+    }
+    s.label = best >= 0 ? sections[best].label : String.fromCharCode(65 + next++);
+  });
+  return sections;
+};

@@ -201,6 +201,61 @@ files['band.mid'] = [
 // nothing but a drum kit on channel 10
 files['drums-only.mid'] = [...header(0, 1, PPQ), ...track([name('Kit'), ...loop])];
 
+// a song in sections, 4/4: A in C major at 120 bpm (8 bars), B in A flat major with a busier tune (8 bars), A again,
+// then C in E major at 150 bpm (8 bars). Melody, chords, bass and drums all the way: 32 bars, about 61 s
+const SECTIONS = {
+  A: {chords: [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50]], scale: [60, 62, 64, 65, 67, 69, 71, 72], step: 1},
+  B: {chords: [[44, 48, 51], [46, 50, 53], [51, 55, 58], [48, 51, 55]], scale: [68, 70, 72, 73, 75, 77, 79, 80], step: 0.5},
+  C: {chords: [[52, 56, 59], [49, 52, 56], [45, 49, 52], [47, 51, 54]], scale: [64, 66, 68, 69, 71, 73, 75, 76], step: 1},
+};
+const songTracks = {melody: [], chords: [], bass: [], drums: []};
+// the tempo goes to 150 bpm where C starts, after 24 bars
+const tempoMap = [tempo(0, 500000), sig(0, 4, 4), tempo(24 * 4 * PPQ, 400000)];
+let songTick = 0;
+for (const part of ['A', 'B', 'A', 'C']) {
+  const s = SECTIONS[part];
+  const at = songTick;
+  for (let bar = 0; bar < 8; bar++) {
+    const chord = s.chords[Math.floor(bar / 2) % 4];
+    const t = at + bar * 4 * PPQ;
+    songTracks.chords.push({t, keys: chord.map((k) => k + 12), len: 4 * PPQ - 20, vel: 64});
+    songTracks.bass.push({t, keys: [chord[0] - 12], len: 2 * PPQ - 20, vel: 90}, {t: t + 2 * PPQ, keys: [chord[0] - 12 + 7], len: 2 * PPQ - 20, vel: 90});
+    // the tune walks the scale from the chord's third, up then down
+    const n = 4 / s.step;
+    for (let k = 0; k < n; k++) {
+      const deg = (bar * 3 + (k < n / 2 ? k : n - k)) % 8;
+      songTracks.melody.push({t: t + k * s.step * PPQ, keys: [s.scale[deg]], len: s.step * PPQ - 30, vel: 96});
+    }
+    for (let q = 0; q < 8; q++) {
+      const keys = [42];
+      if (q % 4 === 0) keys.push(36);
+      if (q % 4 === 2) keys.push(38);
+      songTracks.drums.push({t: t + (q * PPQ) / 2, keys, len: 60, vel: 100});
+    }
+  }
+  songTick += 32 * PPQ;
+}
+/** absolute-time notes to a track's events on one channel */
+const absolute = (notes, ch) => {
+  const ev = [];
+  for (const n of notes) for (const k of n.keys) ev.push([n.t, 1, k, n.vel], [n.t + n.len, 0, k, 0]);
+  ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let last = 0;
+  return ev.map(([t, isOn, k, v]) => {
+    const d = t - last;
+    last = t;
+    return isOn ? on(d, ch, k, v) : off(d, ch, k);
+  });
+};
+files['sections.mid'] = [
+  ...header(1, 5, PPQ),
+  ...track([name('Sections'), ...tempoMap]),
+  ...track([name('Melody'), ...absolute(songTracks.melody, 0)]),
+  ...track([name('Chords'), ...absolute(songTracks.chords, 1)]),
+  ...track([name('Bass'), program(0, 2, 33), ...absolute(songTracks.bass, 2)]),
+  ...track([name('Drums'), ...absolute(songTracks.drums, 9)]),
+];
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   mkdirSync(DIR, {recursive: true});
   for (const [file, bytes] of Object.entries(files)) writeFileSync(DIR + file, Uint8Array.from(bytes));
