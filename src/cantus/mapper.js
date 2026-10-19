@@ -15,7 +15,7 @@
 // prefers points inside the framing of its moment, so a fast passage stays in one framing instead of chasing every
 // note. cameraAt and morphAt read the picture back at any song time, so pause, seek and loop are right at once.
 
-import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=26';
+import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=27';
 
 export const RATE_MIN = RATE * 2 ** (-PITCH_DOWN / 12);
 export const RATE_MAX = RATE * 2 ** (PITCH_UP / 12);
@@ -376,7 +376,7 @@ const framingsOf = (windows, presses) => {
  * on screen first), `layout` ([{start, end, fractal}]) and counts: `moved` notes shifted by octaves, `skipped` melody
  * notes not played because a higher one starts at the same time, `left` notes of each part left out for lack of
  * voices, `stolen` notes cut short to free their voice, `drumsBorrowed` when the drums use the Burning ship's sounds,
- * `drumsOnly` when the song has nothing but drums.
+ * `drumsOnly` when the song has nothing but drums. A press made from a note with an `id` carries it as `id`.
  */
 export const planShow = (timeline, settings = {}, points, opts = {}) => {
   const set = settingsOf(settings, points);
@@ -537,6 +537,7 @@ const assign = (timeline, set, points, screenAt) => {
       src: {note, prev},
     };
     if (b.shift) press.moved = b.shift;
+    if (note.id !== undefined) press.id = note.id;
     made.push(press);
     return press;
   };
@@ -650,6 +651,7 @@ const assign = (timeline, set, points, screenAt) => {
           releaseS: RELEASE.drums,
           src: {drum: kind},
         };
+        if (note.id !== undefined) press.id = note.id;
         made.push(press);
       }
       // a free voice: its last note and its release are over; one that last played this part first, then the lowest

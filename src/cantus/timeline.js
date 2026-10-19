@@ -31,7 +31,36 @@ export const cleanTitle = (s) =>
     .trim()
     .slice(0, MAX_TITLE);
 
-/** a checked copy of a timeline, notes sorted by start then pitch; throws a short message for the user */
+export const MAX_ID = 2 ** 31 - 1;
+
+/** one checked note, a fresh object; `duration` is the song's length. Throws a short message for the user. */
+export const checkNote = (n, duration) => {
+  if (!n || typeof n !== 'object') throw new Error('A note is damaged.');
+  const out = {
+    start: num(n.start, 0, duration, 'A note start'),
+    duration: num(n.duration, MIN_NOTE, MAX_SECONDS, 'A note length'),
+    midi: num(n.midi, 0, 127, 'A note pitch'),
+    velocity: num(n.velocity, 0, 1, 'A note velocity'),
+    part: n.part,
+    confidence: num(n.confidence, 0, 1, 'A note confidence'),
+    source: n.source,
+  };
+  if (!PARTS.includes(out.part)) throw new Error('A note has an unknown part.');
+  if (!SOURCES.includes(out.source)) throw new Error('A note has an unknown source.');
+  if (out.part === 'drums') out.drum = DRUMS.includes(n.drum) ? n.drum : 'other';
+  if (n.track !== undefined) out.track = num(n.track, 0, 4095, 'A note track');
+  if (Number.isInteger(n.id) && n.id >= 0 && n.id <= MAX_ID) out.id = n.id;
+  return out;
+};
+
+/** notes sorted by start, then pitch */
+export const byTime = (a, b) => a.start - b.start || a.midi - b.midi;
+
+/**
+ * A checked copy of a timeline, notes sorted by start then pitch; throws a short message for the user. Every note
+ * gets an `id`, an integer the editor knows it by: an id it already has is kept unless another note has it too, and
+ * the others are numbered on from the largest. Ids stay on this device; they are never shared.
+ */
 export const validateTimeline = (t) => {
   if (!t || typeof t !== 'object') throw new Error('This is not a song.');
   const duration = Number(t.duration);
@@ -39,24 +68,18 @@ export const validateTimeline = (t) => {
   if (duration > MAX_SECONDS) throw new Error('Songs can be up to 10 minutes long.');
   if (!Array.isArray(t.notes)) throw new Error('This song has no notes.');
   if (t.notes.length > MAX_NOTES) throw new Error('This song has more than 20,000 notes.');
-  const notes = t.notes.map((n) => {
-    if (!n || typeof n !== 'object') throw new Error('A note is damaged.');
-    const out = {
-      start: num(n.start, 0, duration, 'A note start'),
-      duration: num(n.duration, MIN_NOTE, MAX_SECONDS, 'A note length'),
-      midi: num(n.midi, 0, 127, 'A note pitch'),
-      velocity: num(n.velocity, 0, 1, 'A note velocity'),
-      part: n.part,
-      confidence: num(n.confidence, 0, 1, 'A note confidence'),
-      source: n.source,
-    };
-    if (!PARTS.includes(out.part)) throw new Error('A note has an unknown part.');
-    if (!SOURCES.includes(out.source)) throw new Error('A note has an unknown source.');
-    if (out.part === 'drums') out.drum = DRUMS.includes(n.drum) ? n.drum : 'other';
-    if (n.track !== undefined) out.track = num(n.track, 0, 4095, 'A note track');
-    return out;
-  });
-  notes.sort((a, b) => a.start - b.start || a.midi - b.midi);
+  const notes = t.notes.map((n) => checkNote(n, duration));
+  const seen = new Set();
+  let next = 0;
+  for (const n of notes) {
+    if (n.id === undefined || seen.has(n.id)) delete n.id;
+    else {
+      seen.add(n.id);
+      next = Math.max(next, n.id + 1);
+    }
+  }
+  notes.sort(byTime);
+  for (const n of notes) if (n.id === undefined) n.id = next++;
   const tempo = t.tempo || {};
   const beats = Array.isArray(tempo.beats) ? tempo.beats.slice(0, MAX_BEATS).filter((b) => Number.isFinite(b) && b >= 0) : [];
   const bars = Array.isArray(t.bars) ? t.bars.slice(0, MAX_BEATS).filter((b) => Number.isFinite(b) && b >= 0) : undefined;

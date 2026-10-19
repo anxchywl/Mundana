@@ -35,17 +35,7 @@ export class Transport {
     this.onEnd = onEnd;
     this.timer = timer;
     this.wallNow = wallNow;
-    this.duration = plan.timeline.duration;
-    this.presses = plan.presses;
-    this.voices = 1 + plan.presses.reduce((m, p) => Math.max(m, p.voice), 0);
-    // presses and releases in one list by time; at the same time a release comes first, so it never ends a new note
-    const events = [];
-    for (const p of plan.presses) {
-      events.push({time: p.time, kind: 1, press: p});
-      events.push({time: p.time + p.duration, kind: 0, press: p});
-    }
-    events.sort((a, b) => a.time - b.time || a.kind - b.kind);
-    this.events = events;
+    this.load(plan);
     this.state = 'stopped';
     this.pos = 0;
     this.speed = 1;
@@ -57,6 +47,62 @@ export class Transport {
     this.lastWake = 0;
     this.sent = 0;
     this.minLead = Infinity; // the smallest time between sending a message and its sample, for the report
+    this.sentTo = 0; // song time, on the last anchor, up to which messages have been sent
+    this.next = null; // a new plan waiting for the next wake
+  }
+
+  /** take a plan's presses and releases, in one list by time; at the same time a release comes first, so it never
+   * ends a new note */
+  load(plan) {
+    this.plan = plan;
+    this.duration = plan.timeline.duration;
+    this.presses = plan.presses;
+    this.voices = 1 + plan.presses.reduce((m, p) => Math.max(m, p.voice), 0);
+    const events = [];
+    for (const p of plan.presses) {
+      events.push({time: p.time, kind: 1, press: p});
+      events.push({time: p.time + p.duration, kind: 0, press: p});
+    }
+    events.sort((a, b) => a.time - b.time || a.kind - b.kind);
+    this.events = events;
+    if (this.loop) {
+      this.loop.b = Math.min(this.loop.b, this.duration);
+      if (!(this.loop.b - this.loop.a >= MIN_LOOP)) this.loop = null;
+    }
+  }
+
+  /**
+   * A new plan for the same song (the notes were edited). Stopped or paused, it is taken at once. Playing, the show
+   * keeps playing and the next wake changes over where the messages sent so far end: every voice is released there,
+   * the new plan's notes sounding at that moment are pressed again from where they are, and the rest follow.
+   */
+  setPlan(plan) {
+    if (this.state === 'playing') {
+      this.next = plan;
+      return;
+    }
+    this.load(plan);
+    this.pos = Math.min(this.pos, this.duration);
+  }
+
+  swap() {
+    const plan = this.next;
+    this.next = null;
+    const anchor = this.anchors[this.anchors.length - 1];
+    let T = this.sentTo;
+    let at = this.ctxOf(anchor, T);
+    // a late wake: the change cannot be in the past
+    const soonest = this.ctx.currentTime + 0.01;
+    if (at < soonest) {
+      T = anchor.song + (soonest - anchor.ctx) * this.speed;
+      at = soonest;
+    }
+    const voices = Math.max(this.voices, 1 + plan.presses.reduce((m, p) => Math.max(m, p.voice), 0));
+    for (let v = 0; v < voices; v++) this.send({type: 'release', voice: v, at});
+    this.load(plan);
+    this.cursor = firstFrom(this.events, T);
+    this.sentTo = T;
+    this.pressHeld(T, at);
   }
 
   /** the context time that is reaching the speakers right now */
@@ -119,9 +165,13 @@ export class Transport {
   }
 
   startAt(t) {
+    if (this.next) this.load(this.next);
+    this.next = null;
+    t = Math.min(t, this.duration);
     const at = this.ctx.currentTime + START_DELAY;
     this.anchors = [{ctx: at, song: t}];
     this.cursor = firstFrom(this.events, t);
+    this.sentTo = t;
     this.pressHeld(t, at);
     this.state = 'playing';
     this.lastWake = this.wallNow();
@@ -134,6 +184,7 @@ export class Transport {
     const wall = this.wallNow();
     if (wall - this.lastWake > WAKE_MS + LATE_S * 1000) this.horizon = HORIZON_LATE;
     this.lastWake = wall;
+    if (this.next) this.swap();
     const limit = this.ctx.currentTime + this.horizon;
     // a loop can wrap more than once within one horizon only if it is very short; MIN_LOOP keeps it to a few
     for (let guard = 0; guard < 8; guard++) {
@@ -147,12 +198,14 @@ export class Transport {
         if (e.kind) this.pressAt(e.press, at);
         else this.send({type: 'release', voice: e.press.voice, at});
       }
+      this.sentTo = Math.max(this.sentTo, end);
       if (!this.loop || until < this.loop.b) break;
       // the wrap is scheduled inside the horizon: the end of the loop and its start share one sample
       const at = this.ctxOf(anchor, this.loop.b);
       for (let v = 0; v < this.voices; v++) this.send({type: 'release', voice: v, at});
       this.anchors.push({ctx: at, song: this.loop.a});
       this.cursor = firstFrom(ev, this.loop.a);
+      this.sentTo = this.loop.a;
       this.pressHeld(this.loop.a, at);
     }
     // anchors the speakers have left behind are dropped
@@ -177,7 +230,9 @@ export class Transport {
 
   pause() {
     if (this.state !== 'playing') return;
-    this.pos = this.now();
+    if (this.next) this.load(this.next);
+    this.next = null;
+    this.pos = Math.min(this.now(), this.duration);
     this.stopTimer();
     this.post({type: 'clear'});
     this.state = 'paused';
@@ -192,6 +247,8 @@ export class Transport {
   }
 
   stop() {
+    if (this.next) this.load(this.next);
+    this.next = null;
     this.stopTimer();
     if (this.state === 'playing') this.post({type: 'clear'});
     this.state = 'stopped';

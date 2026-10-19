@@ -126,3 +126,45 @@ test('stop clears and goes back to the start', () => {
   assert.equal(tr.now(), 0);
   assert.equal(tr.state, 'stopped');
 });
+
+test('a new plan while playing takes over at the next wake, where the sent messages end', () => {
+  const a = planOf([[0, 4], [5, 1]], 8);
+  const b = planOf([[0, 4], [2, 3], [6, 1]], 8);
+  b.presses.forEach((p) => (p.fractal = 'multibrot'));
+  const {sent, tr, run, ctx} = rig(a);
+  tr.play();
+  run(1);
+  const sentTo = tr.sentTo;
+  const before = sent.length;
+  tr.setPlan(b);
+  assert.equal(tr.plan, a, 'not before the next wake');
+  run(0.025);
+  assert.equal(tr.plan, b);
+  const at = tr.ctxOf(tr.anchors[tr.anchors.length - 1], sentTo);
+  const after = sent.slice(before);
+  // every voice released at the change, then the new plan's sounding note pressed again from where it is
+  assert.deepEqual(after.slice(0, 1).map((m) => [m.type, m.at]), [['release', at]]);
+  assert.equal(after[1].type, 'press');
+  assert.equal(after[1].at, at);
+  assert.equal(after[1].fractal, 'multibrot');
+  assert.ok(Math.abs(after[1].offset - sentTo) < 1e-9);
+  assert.ok(at > ctx.currentTime, 'never in the past');
+  run(8);
+  const later = presses(sent.slice(before));
+  assert.ok(later.every((m) => m.fractal === 'multibrot'), 'nothing of the old plan after the change');
+  assert.deepEqual(later.slice(1).map((m) => +(m.at - START_DELAY).toFixed(6)), [2, 6]);
+});
+
+test('a new plan while paused or stopped is taken at once', () => {
+  const {tr, run} = rig(planOf([[0, 1]], 10));
+  tr.play();
+  run(3);
+  tr.pause();
+  const pos = tr.pos;
+  tr.setPlan(planOf([[0, 1]], 2));
+  assert.equal(tr.duration, 2);
+  assert.ok(tr.pos <= 2 && pos > 2);
+  tr.stop();
+  tr.setPlan(planOf([[1, 1]], 5));
+  assert.equal(tr.presses[0].time, 1);
+});
