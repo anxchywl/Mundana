@@ -87,6 +87,19 @@ export class Transport {
     return Math.max(0, Math.min(this.duration, this.songAt(this.audibleCtx())));
   }
 
+  /** the song time the speakers play at wall time `ms` (performance.now() time), now or a little ahead: the picture
+   * asks for the moment its frame will be on screen */
+  songAtWall(ms) {
+    if (this.state !== 'playing') return this.pos;
+    const ctx = this.ctx;
+    const ts = ctx.getOutputTimestamp?.();
+    const c =
+      ts && ts.performanceTime > 0
+        ? ts.contextTime + (ms - ts.performanceTime) / 1000
+        : ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0) + (ms - this.wallNow()) / 1000;
+    return Math.max(0, Math.min(this.duration, this.songAt(c)));
+  }
+
   send(m) {
     this.minLead = Math.min(this.minLead, m.at - this.ctx.currentTime);
     this.sent++;

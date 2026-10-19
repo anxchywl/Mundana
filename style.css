@@ -889,6 +889,41 @@ body.show-on .cantus {
   justify-content: space-between;
   font-size: 15px;
 }
+/* the fractals: one, or a set list */
+.c-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15px;
+}
+.c-row[hidden],
+.c-set[hidden],
+.c-prep[hidden] {
+  display: none;
+}
+.c-set {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.c-set li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+.c-set .c-part {
+  font-variant-numeric: tabular-nums;
+}
+.c-prep {
+  margin-top: 10px !important;
+  font-size: 13.5px;
+  color: var(--blue);
+}
 .c-parts {
   list-style: none;
   margin: 10px 0 0;
@@ -910,12 +945,22 @@ body.show-on .cantus {
   font-size: 13px;
   color: var(--paper-3);
 }
+/* with a set list a pitched part plays the fractal on screen: one column, beside its period */
+.c-parts .c-here {
+  grid-column: auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .c-parts li.muted .c-part,
 .c-parts li.muted select,
 .c-parts li.muted .c-where {
   opacity: 0.45;
 }
 .c-voices select,
+.c-row select,
+.c-set select,
 .c-parts select {
   min-width: 0;
   height: 32px;
@@ -929,12 +974,16 @@ body.show-on .cantus {
   cursor: pointer;
 }
 .c-voices select:focus-visible,
+.c-row select:focus-visible,
+.c-set select:focus-visible,
 .c-parts select:focus-visible,
 .c-mute:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
 .c-voices option,
+.c-row option,
+.c-set option,
 .c-parts option {
   background: #19191c;
 }
@@ -1051,6 +1100,25 @@ body.show-on .hint {
   top: 24px;
   font-size: 14px;
   color: var(--red);
+}
+/* with debug=1 in the link: frame times and drift, in a small line at the very top */
+.debug {
+  position: fixed;
+  z-index: 30;
+  top: calc(env(safe-area-inset-top) + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--paper-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 6px var(--ink), 0 0 2px var(--ink);
+}
+.debug[hidden] {
+  display: none;
 }
 .toast {
   position: fixed;

@@ -272,6 +272,29 @@ export class Renderer {
     return p;
   }
 
+  /** whether the program for f, or for a morph from f to g, is built */
+  has(f, g = null) {
+    return !this.lost && this.programs.has(g ? `${f.key}>${g.key}` : f.key);
+  }
+
+  /** build a program ahead of time and run it once with every colour write off, so the driver finishes its work now
+   *  (about 30 ms on an M3) instead of in the first frame that needs it. The picture does not change */
+  warm(f, g = null) {
+    const {gl} = this;
+    if (this.lost || gl.isContextLost()) return;
+    const {prog, loc, attr} = this.program(f, g);
+    gl.useProgram(prog);
+    gl.enableVertexAttribArray(attr);
+    gl.vertexAttribPointer(attr, 2, gl.FLOAT, false, 0, 0);
+    gl.viewport(0, 0, 1, 1);
+    gl.uniform2f(loc.uRes, 1, 1);
+    gl.uniform1f(loc.uSpan, 1);
+    gl.uniform1i(loc.uIters, 1);
+    gl.colorMask(false, false, false, false);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.colorMask(true, true, true, true);
+  }
+
   resize(w, h, k) {
     this.k = k;
     this.canvas.width = Math.round(w * k);

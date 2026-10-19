@@ -155,8 +155,19 @@
         <p id="c-meta" class="c-meta"></p>
         <ul id="c-tracks" class="c-tracks"></ul>
         <div class="c-voices"><label for="c-voices">Voices</label><select id="c-voices"></select></div>
+        <div class="c-row">
+          <label for="c-layout">Fractals</label>
+          <select id="c-layout">
+            <option value="one">One fractal</option>
+            <option value="sections">A fractal per section</option>
+            <option value="bars">Change every few bars</option>
+          </select>
+        </div>
+        <div id="c-every-row" class="c-row" hidden><label for="c-every">Bars for each fractal</label><select id="c-every"></select></div>
+        <ol id="c-set" class="c-set" aria-label="Set list" hidden></ol>
         <ul id="c-parts" class="c-parts" aria-label="Parts"></ul>
         <p id="c-notes" class="c-notes"></p>
+        <p id="c-prep" class="c-prep" hidden>Preparing the picture</p>
         <button id="c-play" class="start">Play</button>
       </div>
     </section>
@@ -171,6 +182,7 @@
     </div>
 
     <p id="hint" class="hint">Press and hold anywhere to hear it</p>
+    <p id="debug" class="debug" hidden></p>
     <p id="limit" class="limit" hidden>That is as deep as the GPU can see</p>
     <p id="toast" class="toast" role="status" aria-live="polite"></p>
 

@@ -47,6 +47,7 @@ const MORPH_MS = reducedMotion ? 0 : 1700;
 const desktop = () => window.matchMedia('(min-width: 761px)').matches;
 
 const cur = () => fractals[state.type];
+const byKey = (key) => fractals.find((f) => f.key === key);
 const kOf = () => paramOf(cur(), state.params);
 
 // ---------- view ----------
@@ -64,13 +65,22 @@ try {
 let frame = 0;
 let settling = false;
 
+// capped at about 2.2 million pixels so the slowest maps (Chirikov with orbit tones, about 45 ns a pixel on an M3)
+// still redraw several times a second on a big monitor
+const baseScale = () => Math.min(window.devicePixelRatio || 1, 1.5, Math.sqrt(2.2e6 / (W * H)));
+// a show that cannot keep up lowers the render scale below that, never the sound
+let scaleCap = Infinity;
+const setScaleCap = (cap) => {
+  scaleCap = cap;
+  renderer.resize(W, H, Math.min(baseScale(), scaleCap));
+  frame = 0;
+};
+
 const resize = () => {
   const r = stage.getBoundingClientRect();
   W = r.width;
   H = r.height;
-  // capped at about 2.2 million pixels so the slowest maps (Chirikov with orbit tones, about 45 ns a pixel on an
-  // M3) still redraw several times a second on a big monitor
-  renderer.resize(W, H, Math.min(window.devicePixelRatio || 1, 1.5, Math.sqrt(2.2e6 / (W * H))));
+  renderer.resize(W, H, Math.min(baseScale(), scaleCap));
   const k = window.devicePixelRatio || 1;
   overlay.width = Math.round(W * k);
   overlay.height = Math.round(H * k);
@@ -824,19 +834,32 @@ const drawOverlay = (now) => {
 
 const tick = (now) => {
   const dt = Math.min(0.1, (now - last) / 1000);
+  debugFrame(now - last);
   last = now;
-  if (cantus?.playing()) cantus.frame(now);
-  // ease toward the destination, frame-rate independent
-  const e = 1 - Math.pow(0.8, dt * 60);
   const v = state.view;
   const d = state.dest;
-  const logS = Math.log(v.span) + (Math.log(d.span) - Math.log(v.span)) * e;
-  v.cx += (d.cx - v.cx) * e;
-  v.cy += (d.cy - v.cy) * e;
-  v.span = Math.exp(logS);
-  const still = Math.abs(d.cx - v.cx) / v.span < 1e-4 && Math.abs(d.cy - v.cy) / v.span < 1e-4 && Math.abs(d.span / v.span - 1) < 1e-4;
-  if (still) Object.assign(v, d);
-  if (state.morph) {
+  // a playing show is a function of song time: its fractal, view and morph are used as they are, with no easing
+  const shown = cantus?.playing() ? cantus.frame(now) : null;
+  if (shown) {
+    if (shown.type !== state.type) {
+      state.type = shown.type;
+      renderParam();
+      syncUI();
+    }
+    Object.assign(v, shown.view);
+    Object.assign(d, shown.view);
+    state.morph = shown.morph;
+  } else {
+    // ease toward the destination, frame-rate independent
+    const e = 1 - Math.pow(0.8, dt * 60);
+    const logS = Math.log(v.span) + (Math.log(d.span) - Math.log(v.span)) * e;
+    v.cx += (d.cx - v.cx) * e;
+    v.cy += (d.cy - v.cy) * e;
+    v.span = Math.exp(logS);
+    const still = Math.abs(d.cx - v.cx) / v.span < 1e-4 && Math.abs(d.cy - v.cy) / v.span < 1e-4 && Math.abs(d.span / v.span - 1) < 1e-4;
+    if (still) Object.assign(v, d);
+  }
+  if (state.morph && !shown) {
     // the formula and the view travel together, on one eased clock
     const m = state.morph;
     const t = Math.min(1, (now - m.t0) / MORPH_MS);
@@ -899,6 +922,32 @@ const tick = (now) => {
 
   drawOverlay(now);
   requestAnimationFrame(tick);
+};
+
+// ---------- debug readout ----------
+
+// with debug=1 in the link, a line at the top shows the frame rate, the 95th percentile frame time, the picture's
+// detail and, during a song, how far the picture is from the sound. It is how to measure a phone
+const debugOn = /(?:^#|&)debug=1(?:&|$)/.test(location.hash);
+const debugTimes = new Float64Array(240);
+let debugCount = 0;
+let debugShown = 0;
+const debugFrame = (ms) => {
+  if (!debugOn) return;
+  debugTimes[debugCount++ % debugTimes.length] = ms;
+  const now = performance.now();
+  if (now - debugShown < 250) return;
+  debugShown = now;
+  const n = Math.min(debugCount, debugTimes.length);
+  const sorted = Array.from(debugTimes.subarray(0, n)).sort((a, b) => a - b);
+  const mean = sorted.reduce((a, b) => a + b, 0) / n;
+  const p95 = sorted[Math.min(n - 1, Math.floor(n * 0.95))];
+  const drift = cantus?.drift();
+  const el = $('#debug');
+  el.hidden = false;
+  el.textContent =
+    `${(1000 / mean).toFixed(0)} fps, p95 ${p95.toFixed(1)} ms, iters ${state.iters.toLocaleString('en')}, k ${renderer.k.toFixed(2)}` +
+    (drift ? `, drift ${drift.last.toFixed(1)} ms, p95 ${drift.p95.toFixed(1)}, max ${drift.max.toFixed(1)}` : '');
 };
 
 // ---------- input on the picture ----------
@@ -1282,6 +1331,7 @@ const writeHash = () => {
   if (state.point) parts.push(`px=${state.point[0]}`, `py=${state.point[1]}`);
   if (state.colour) parts.push(`colours=${state.colour}`);
   if (state.rate !== RATE) parts.push(`rate=${state.rate}`);
+  if (debugOn) parts.push('debug=1');
   history.replaceState(null, '', `#${parts.join('&')}`);
 };
 const saveHash = () => {
@@ -1347,6 +1397,14 @@ const openSong = async () => {
         desktop,
         drawOrbit,
         hideLimit: () => ($('#limit').hidden = true),
+        reducedMotion: () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        /** build the picture's program for fractal a, or for a morph from a to b, ahead of time; and whether it is built */
+        warm: (a, b) => renderer.warm(byKey(a), b ? byKey(b) : null),
+        ready: (a, b) => renderer.has(byKey(a), b ? byKey(b) : null),
+        /** the picture's detail, which a show that cannot keep up lowers */
+        quality: () => ({iters: state.iters, k: renderer.k, baseK: baseScale()}),
+        setIters: (n) => (state.iters = n),
+        setScaleCap,
         /** switch to a fractal for the show, without pausing it and without a morph */
         showFractal: (key) => {
           const i = fractals.findIndex((f) => f.key === key);
@@ -1373,7 +1431,10 @@ const openSong = async () => {
 
 // ---------- start ----------
 
-renderer.onRestore = () => (frame = 0);
+renderer.onRestore = () => {
+  frame = 0;
+  cantus?.restored();
+};
 new ResizeObserver(resize).observe(stage);
 resize();
 buildGallery();
