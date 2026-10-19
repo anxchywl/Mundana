@@ -141,29 +141,36 @@ const pick = (lib, view, preferred, midi, prev, frame) => {
     shift--;
   }
   let best = null;
+  let bestRate = 0;
   let bestCost = Infinity;
   for (const p of periods) {
     const rate = freq * p;
     if (rate < RATE_MIN * (1 - 1e-9) || rate > RATE_MAX * (1 + 1e-9)) continue;
     const periodCost = COST.period * Math.abs(Math.log2(p / preferred));
     for (const c of lib.cycles.get(p)) {
-      const dist = prev ? Math.hypot(c.point[0] - prev[0], c.point[1] - prev[1]) / view.span : 0;
+      // Math.sqrt rather than Math.hypot: this loop runs for every candidate of every note, twice
+      const dx = prev ? c.point[0] - prev[0] : 0;
+      const dy = prev ? c.point[1] - prev[1] : 0;
+      const dist = Math.sqrt(dx * dx + dy * dy) / view.span;
       let cost =
         COST.distance * dist +
         periodCost +
         COST.radius * Math.min(COST.radiusCap, (view.span * COST.radiusScale) / c.radius) +
         COST.moved * Math.abs(shift);
       if (frame) {
-        const out = Math.hypot(c.point[0] - frame.centre[0], c.point[1] - frame.centre[1]) / (frame.span / 2) - 1;
+        const fx = c.point[0] - frame.centre[0];
+        const fy = c.point[1] - frame.centre[1];
+        const out = Math.sqrt(fx * fx + fy * fy) / (frame.span / 2) - 1;
         if (out > 0) cost += COST.camera * out;
       }
       if (cost < bestCost) {
         bestCost = cost;
-        best = {c, rate, shift};
+        best = c;
+        bestRate = rate;
       }
     }
   }
-  return best;
+  return best ? {c: best, rate: bestRate, shift} : null;
 };
 
 /**
@@ -393,10 +400,9 @@ export const planShow = (timeline, settings = {}, points, opts = {}) => {
   }
   const windows = windowsOf(timeline, layout, morphs);
 
-  // first without the camera, then with the framings that plan gives
-  let result = assign(timeline, set, points, at, null, null);
-  const frames = framingsOf(windows, result.presses);
-  result = assign(timeline, set, points, at, windows, frames);
+  // first without the camera, then the points again with the framings that plan gives
+  const result = assign(timeline, set, points, at);
+  repick(result.made, set, points, at, windows, framingsOf(windows, result.presses));
   const presses = result.presses;
 
   // the camera: each window's framing, held while it barely moves; a change of fractal glides with its morph
@@ -436,13 +442,12 @@ export const planShow = (timeline, settings = {}, points, opts = {}) => {
 };
 
 /**
- * One planning pass: every note gets a point and a voice. `screenAt(t)` is the fractal on screen at song time t; with a set
- * list every pitched note plays on it, with one fractal each part keeps its own. With `windows` and `frames`, notes
- * prefer points inside the framing of their window, and the drums take the sounds nearest its centre.
+ * How a pass picks points: `screenAt(t)` is the fractal on screen at song time t; with a set list every pitched note
+ * plays on it, with one fractal each part keeps its own. With `windows` and `frames`, notes prefer points inside the
+ * framing of their window, and the drums take the sounds nearest its centre.
  */
-const assign = (timeline, set, points, screenAt, windows, frames) => {
+const picker = (set, points, screenAt, windows, frames) => {
   const parts = set.parts;
-  const n = set.voices;
   const one = set.layout === 'one';
   const fractalOf = (part, t) => (one ? parts[part].fractal : screenAt(t));
   const frameAt = (t) => {
@@ -451,41 +456,88 @@ const assign = (timeline, set, points, screenAt, windows, frames) => {
     return i >= 0 ? frames[i] : null;
   };
   // the drums of each fractal, seen around its starting view's centre, or around each window's framing
-  const drumCache = new Map();
+  const drumCache = new Map(); // by window, or by fractal in the first pass
   const drumsAt = (t) => {
     const key = screenAt(t);
     const i = windows ? lastAtOrBefore(windows, t, (w) => w.start) : -1;
-    const id = `${key} ${i}`;
-    if (!drumCache.has(id)) {
+    const id = i >= 0 ? i : key;
+    let d = drumCache.get(id);
+    if (!d) {
       const v = byKey.get(key).view;
-      drumCache.set(id, drumPoints(points, key, i >= 0 ? frames[i].centre : [v.cx, v.cy]));
+      d = drumPoints(points, key, i >= 0 ? frames[i].centre : [v.cx, v.cy]);
+      drumCache.set(id, d);
     }
-    return drumCache.get(id);
+    return d;
   };
+  /** the best point for a note, after the press `prev` on the same voice (or null); see pick */
+  const best = (note, part, prev) => {
+    const key = fractalOf(part, note.start);
+    const b = pick(points.fractals[key], byKey.get(key).view, parts[part].period, Math.round(note.midi), prev && prev.fractal === key ? prev.point : null, frameAt(note.start));
+    if (b) b.key = key;
+    return b;
+  };
+  return {best, drumsAt};
+};
 
+/**
+ * The second pass: the points of the first pass are picked again with the camera's framings, in the order they were
+ * first picked, each after the same press as before. Which notes play, and on which voice, never depends on the
+ * point a note gets, so only the points change; it gives the same plan as planning everything again.
+ */
+const repick = (made, set, points, screenAt, windows, frames) => {
+  const {best, drumsAt} = picker(set, points, screenAt, windows, frames);
+  for (const p of made) {
+    const src = p.src;
+    delete p.src;
+    let from = src.from;
+    if (src.drum) {
+      const d = drumsAt(p.time)[src.drum];
+      p.fractal = d.fractal;
+      p.point = d.point;
+      continue;
+    }
+    if (!from) {
+      const b = best(src.note, p.part, src.prev);
+      from = {fractal: b.key, point: b.c.point, z0: b.c.z0, rate: b.rate, period: b.c.period};
+    }
+    p.fractal = from.fractal;
+    p.point = from.point;
+    p.z0 = from.z0;
+    p.rate = from.rate;
+    p.period = from.period;
+  }
+};
+
+/** One planning pass: every note gets a point and a voice. Every press made, in the order it was made, is in `made`,
+ * with `src`: how its point was picked, for repick. */
+const assign = (timeline, set, points, screenAt) => {
+  const parts = set.parts;
+  const n = set.voices;
+  const {best, drumsAt} = picker(set, points, screenAt, null, null);
   const presses = [];
+  const made = [];
   let moved = 0;
   const pitched = (note, part, voice, prev) => {
-    const midi = Math.round(note.midi);
-    const key = fractalOf(part, note.start);
-    const best = pick(points.fractals[key], byKey.get(key).view, parts[part].period, midi, prev && prev.fractal === key ? prev.point : null, frameAt(note.start));
-    if (!best) return null;
-    if (best.shift) moved++;
+    const b = best(note, part, prev);
+    if (!b) return null;
+    if (b.shift) moved++;
     const press = {
       time: note.start,
       voice,
-      fractal: key,
-      point: best.c.point,
-      z0: best.c.z0,
-      rate: best.rate,
+      fractal: b.key,
+      point: b.c.point,
+      z0: b.c.z0,
+      rate: b.rate,
       duration: note.duration,
       velocity: note.velocity,
       part,
-      period: best.c.period,
-      midi,
+      period: b.c.period,
+      midi: Math.round(note.midi),
       releaseS: RELEASE[part],
+      src: {note, prev},
     };
-    if (best.shift) press.moved = best.shift;
+    if (b.shift) press.moved = b.shift;
+    made.push(press);
     return press;
   };
 
@@ -506,7 +558,7 @@ const assign = (timeline, set, points, screenAt, windows, frames) => {
     const until = i + 1 < tune.length ? tune[i + 1].start : Infinity;
     press.duration = Math.min(press.duration, until - press.time);
     presses.push(press);
-    prev = {fractal: press.fractal, point: press.point};
+    prev = press;
   }
 
   // bass, chords and drums share voices 1 to n - 1, in note start order
@@ -520,7 +572,7 @@ const assign = (timeline, set, points, screenAt, windows, frames) => {
   let waiting = [];
   const hold = (v, press) => {
     holding[v] = press;
-    prevOn[v] = {fractal: press.fractal, point: press.point};
+    prevOn[v] = press;
     presses.push(press);
   };
   /** a waiting note takes the first voice that comes free before `limit`, while enough of it is left */
@@ -545,7 +597,9 @@ const assign = (timeline, set, points, screenAt, windows, frames) => {
       }
       const w = waiting.splice(k, 1)[0];
       const t = Math.max(at, w.since);
-      hold(v, {...w.press, time: t, duration: w.until - t, voice: v, group: 0, resumed: true});
+      const back = {...w.press, time: t, duration: w.until - t, voice: v, group: 0, resumed: true, src: {from: w.press}};
+      made.push(back);
+      hold(v, back);
     }
   };
   const rank = {bass: 0, drums: 1, chords: 2};
@@ -594,7 +648,9 @@ const assign = (timeline, set, points, screenAt, windows, frames) => {
           part: 'drums',
           drum: kind,
           releaseS: RELEASE.drums,
+          src: {drum: kind},
         };
+        made.push(press);
       }
       // a free voice: its last note and its release are over; one that last played this part first, then the lowest
       let voice = -1;
@@ -662,7 +718,7 @@ const assign = (timeline, set, points, screenAt, windows, frames) => {
   }
   presses.sort((a, b) => a.time - b.time || a.voice - b.voice);
 
-  return {presses, moved, skipped, left, stolen};
+  return {presses, made, moved, skipped, left, stolen};
 };
 
 /** the view at song time t, {cx, cy, span}: the keyframe in force, or the glide into it (the centre moves in a
