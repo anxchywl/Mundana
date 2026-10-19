@@ -1019,6 +1019,152 @@ body.show-on .cantus {
   cursor: default;
 }
 
+/* under the song: Play, and the piano roll */
+.c-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.cantus .c-actions .start {
+  margin-top: 0;
+}
+.c-edit {
+  padding: 13px 20px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-size: 16px;
+  transition: background 0.15s;
+}
+.c-edit:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ---------- the piano roll: the lower part of the screen on a computer, a full sheet on a phone ---------- */
+
+.editor {
+  z-index: 6;
+  left: var(--gap);
+  right: var(--gap);
+  bottom: var(--gap);
+  height: calc(45vh - var(--gap));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  background: #19191c;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0.25s;
+}
+.editor.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.e-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-height: 32px;
+}
+.e-title {
+  margin: 0 0 0 6px;
+  font-weight: 600;
+  font-size: 17px;
+}
+.e-approx {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--blue);
+}
+.e-approx[hidden] {
+  display: none;
+}
+.e-time,
+.e-count {
+  font-size: 13px;
+  color: var(--paper-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.e-count {
+  color: var(--paper-3);
+}
+.e-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.e-tools .round.sm:disabled,
+.e-tools select:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.e-tools select {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--paper);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.e-tools select:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.e-tools option {
+  background: #19191c;
+}
+#e-play .i-pause,
+#e-play.playing .i-play {
+  display: none;
+}
+#e-play.playing .i-pause {
+  display: block;
+}
+#e-play .i-play {
+  fill: currentColor;
+}
+.e-roll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.e-roll canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline: none;
+}
+.e-roll canvas:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+/* while the roll is open, what sits in the lower part of the screen steps aside; the song's bar sits just above it */
+body.editor-open .dock,
+body.editor-open .tools,
+body.editor-open .readout,
+body.editor-open .song-corner,
+body.editor-open .hint {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+body.editor-open .transport {
+  bottom: calc(45vh + 12px);
+}
+
 /* the transport bar sits centred above the dock, where the hint was */
 .transport {
   left: 50%;
@@ -1539,6 +1685,30 @@ body.show-on .hint {
   .cantus.open,
   body.show-on .cantus.open {
     transform: none;
+  }
+  /* the piano roll fills the screen, with its toolbar on two rows if it needs them */
+  .editor {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    height: auto;
+    border-radius: 0;
+    padding: calc(env(safe-area-inset-top) + 10px) 10px calc(10px + env(safe-area-inset-bottom));
+    opacity: 1;
+    transform: translateY(100%);
+  }
+  body.debug-on .editor {
+    padding-top: calc(env(safe-area-inset-top) + 20px);
+  }
+  .e-tools {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .e-tools .round.sm {
+    width: 34px;
+    height: 34px;
   }
   .transport {
     left: var(--gap);

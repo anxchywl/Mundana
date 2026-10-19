@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=26';
-import {spots} from './spots.js?v=26';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=26';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=27';
+import {spots} from './spots.js?v=27';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=27';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -128,7 +128,7 @@ const interruptShow = () => cantus?.interrupt();
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=26', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=27', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -1158,7 +1158,7 @@ const toggleAbout = (open = !$('#about').classList.contains('open')) => {
 };
 // on a phone an open sheet dims the picture behind it
 const dimForSheets = () => {
-  const open = $('#settings').classList.contains('open') || $('#about').classList.contains('open') || $('#cantus').classList.contains('open') || galleryOpen();
+  const open = $('#settings').classList.contains('open') || $('#about').classList.contains('open') || $('#cantus').classList.contains('open') || galleryOpen() || !!cantus?.editorOpen();
   document.body.classList.toggle('sheet-open', open && !desktop());
 };
 const closeSettings = () => {
@@ -1390,7 +1390,7 @@ const loadHash = () => {
 
 const openSong = async () => {
   if (!cantus) {
-    cantusLoading ||= import('./cantus/show.js?v=26').then((m) =>
+    cantusLoading ||= import('./cantus/show.js?v=27').then((m) =>
       m.initShow({
         state,
         fractals,

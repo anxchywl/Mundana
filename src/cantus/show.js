@@ -1,14 +1,15 @@
 // Show mode: the Cantus panel (choose a MIDI file, see its tracks and parts, set the voices, the fractals and each
-// part's settings, press Play), the transport bar, and the show itself, where the page follows the plan: each frame
+// part's settings, press Play or Edit notes), the transport bar, the piano roll's link to the show, and the show itself, where the page follows the plan: each frame
 // asks the plan for the fractal, the morph and the view at the song time the frame will be on screen, and every
 // sounding note is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls
 // into it through a few small hooks; everything it needs from the page comes in `api`.
 
-import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=26';
-import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=26';
-import {Transport} from './scheduler.js?v=26';
-import {loadPoints} from './points.js?v=26';
-import {paramOf} from '../fractals.js?v=26';
+import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=27';
+import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=27';
+import {Transport} from './scheduler.js?v=27';
+import {loadPoints} from './points.js?v=27';
+import {paramOf} from '../fractals.js?v=27';
+import {initEditor} from './editor.js?v=27';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -21,7 +22,7 @@ const PARTS = [
 
 /** the running show, for the browser checks and for later phases: `t` is the song time of the last frame, `page` the
  * page's state, `drift` every measured drift in ms */
-export const live = {plan: null, transport: null, audio: null, drift: [], budget: null, t: 0, page: null};
+export const live = {plan: null, transport: null, audio: null, drift: [], budget: null, t: 0, page: null, editor: null};
 
 /**
  * The frame budget of a show: frame times over a sliding 2 s window. When their 95th percentile is over the target
@@ -80,6 +81,7 @@ const count = (n, one, many) => `${n.toLocaleString('en')} ${n === 1 ? one : man
 const MIN_VOICES = 4; // the panel offers 4 to 6 voices
 const LEFT = {bass: ['bass note', 'bass notes'], chords: ['chord note', 'chord notes'], drums: ['drum hit', 'drum hits']};
 const MAX_DRAWN = 6;
+const EDIT_WAIT = 300; // ms without a new edit before the song is planned again
 
 const option = (value, label) => {
   const o = document.createElement('option');
@@ -104,6 +106,8 @@ export const initShow = (api) => {
   let shownTime = '';
   let settings = settingsOf(DEFAULTS, null);
   let longest = 0; // the longest press of the plan, so drawing looks back no further than that
+  let editTimer = 0;
+  let cue = 0; // where the song starts when there is no show, set by a click on the editor's ruler
   live.page = api.state;
   const byKey = new Map(api.fractals.map((f) => [f.key, f]));
   const index = new Map(api.fractals.map((f, i) => [f.key, i]));
@@ -149,10 +153,14 @@ export const initShow = (api) => {
     }
     stopShow();
     timeline = t;
+    cue = 0;
     replan();
+    editor.load(timeline);
   });
 
   const replan = (announce = true) => {
+    clearTimeout(editTimer);
+    editTimer = 0;
     transport = null;
     plan = null;
     try {
@@ -198,6 +206,7 @@ export const initShow = (api) => {
         stopShow();
         timeline = setTrackPart(timeline, i, sel.value);
         replan(false);
+        editor.replace(timeline);
       });
       const text = document.createElement('span');
       text.className = 'c-track';
@@ -225,6 +234,33 @@ export const initShow = (api) => {
     $('#c-notes').hidden = !notes.length;
     $('#c-play').disabled = !plan?.presses.length;
   };
+
+  /**
+   * The notes were edited: plan again from the new timeline. A show keeps going: the transport takes the new plan
+   * at its next wake, and the picture follows the new plan from its next frame.
+   */
+  const replanLive = () => {
+    clearTimeout(editTimer);
+    editTimer = 0;
+    let next;
+    try {
+      next = planShow(timeline, settings, points, {reducedMotion: api.reducedMotion()});
+    } catch (e) {
+      fail(e, 'This song cannot be played.');
+      return;
+    }
+    plan = next;
+    longest = plan.presses.reduce((m, p) => Math.max(m, p.duration), 0);
+    live.plan = plan;
+    if (transport) {
+      transport.setPlan(plan);
+      seek.max = String(transport.duration);
+      updateBar(true);
+    }
+    renderSong();
+    prepare();
+  };
+  const flushEdits = () => editTimer && replanLive();
 
   /** settings changed: the song stops and is planned again */
   const change = (fn) => {
@@ -407,14 +443,18 @@ export const initShow = (api) => {
 
   /** Play in the panel: the song from the start */
   const playSong = async () => {
+    flushEdits();
     if (!plan?.presses.length) return;
     transport?.stop();
+    // the whole song: a range chosen in the editor is let go
+    editor.setRange(null);
     togglePanel(false);
     if (await begin()) transport.play();
   };
 
   const resume = async () => {
     if (mode !== 'paused' || !transport) return;
+    flushEdits();
     if (await begin()) transport.play();
   };
 
@@ -435,6 +475,57 @@ export const initShow = (api) => {
     restoreManual();
     showBar();
   }
+
+  /** from the editor: play from a, looping to b; with no range, play on from where the song is */
+  const playRange = async (a, b) => {
+    flushEdits();
+    if (!plan?.presses.length || mode === 'playing') return;
+    const from = a ?? (mode === 'paused' && transport ? transport.pos : cue);
+    if (!(await begin())) return;
+    transport.setLoop(null);
+    if (a !== null && b !== null) transport.setLoop(a, b);
+    transport.seek(from);
+    transport.play();
+    showBar();
+  };
+
+  const editor = initEditor({
+    timeline: () => timeline,
+    plan: () => plan,
+    commit: (t) => {
+      timeline = t;
+      clearTimeout(editTimer);
+      editTimer = setTimeout(replanLive, EDIT_WAIT);
+    },
+    playing: () => mode === 'playing',
+    songTime: (now) => (!transport || mode === 'off' ? cue : mode === 'playing' ? transport.songAtWall(now + 16.7) : transport.pos),
+    playRange,
+    pause: () => pause(),
+    seek: (t) => {
+      if (transport && mode !== 'off') {
+        transport.seek(t);
+        updateBar(true);
+      } else cue = t;
+    },
+    setLoop: (a, b) => {
+      if (!transport) return;
+      if (a === null) transport.setLoop(null);
+      else {
+        try {
+          transport.setLoop(a, b);
+        } catch {
+          // shorter than a quarter of a second once held inside the song: no loop
+          transport.setLoop(null);
+        }
+      }
+    },
+    opened: (open) => {
+      if (open) togglePanel(false);
+      api.dimForSheets();
+    },
+  });
+  live.editor = editor;
+  $('#c-edit').addEventListener('click', () => editor.open());
 
   playBtn.addEventListener('click', () => (mode === 'playing' ? pause() : resume()));
   $('#t-stop').addEventListener('click', stopShow);
@@ -582,6 +673,7 @@ export const initShow = (api) => {
     interrupt: pause,
     togglePanel,
     closePanel,
+    editorOpen: () => editor.isOpen(),
     frame,
     draw,
     drift,
