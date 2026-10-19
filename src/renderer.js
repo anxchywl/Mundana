@@ -277,8 +277,8 @@ export class Renderer {
     return !this.lost && this.programs.has(g ? `${f.key}>${g.key}` : f.key);
   }
 
-  /** build a program ahead of time and run it once with every colour write off, so the driver finishes its work now
-   *  (about 30 ms on an M3) instead of in the first frame that needs it. The picture does not change */
+  /** build a program ahead of time and draw it once on one pixel at alpha 0, so the driver finishes its work now (25
+   *  to 60 ms on an M3) instead of in the first frame that needs it. The picture does not change */
   warm(f, g = null) {
     const {gl} = this;
     if (this.lost || gl.isContextLost()) return;
@@ -290,9 +290,9 @@ export class Renderer {
     gl.uniform2f(loc.uRes, 1, 1);
     gl.uniform1f(loc.uSpan, 1);
     gl.uniform1i(loc.uIters, 1);
-    gl.colorMask(false, false, false, false);
+    gl.uniform1f(loc.uAlpha, 0);
+    gl.enable(gl.BLEND);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.colorMask(true, true, true, true);
   }
 
   resize(w, h, k) {
@@ -341,7 +341,9 @@ export class Renderer {
       gl.uniform2f(loc.uJitter, 0, 0);
       gl.uniform1f(loc.uAlpha, s.alpha);
     } else if (frame === 0) {
-      gl.disable(gl.BLEND);
+      // blended at alpha 1, which replaces what is there: every draw then uses one blend state, so the driver builds
+      // one pipeline a program (see warm)
+      gl.enable(gl.BLEND);
       gl.uniform2f(loc.uJitter, 0, 0);
       gl.uniform1f(loc.uAlpha, 1);
     } else {

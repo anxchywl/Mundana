@@ -491,7 +491,8 @@ export const initShow = (api) => {
 
   /**
    * each frame of a playing show: the fractal, the morph and the view of the plan at the song time this frame will
-   * be on screen (one frame interval after its start). Returns {type, view, morph} for main.js to use as they are.
+   * be on screen (one frame interval after its start). Returns {type, view, morph} for main.js to use as they are,
+   * and `slow`, the frame time in ms the budget aims under.
    */
   const frame = (now) => {
     const interval = lastNow ? Math.min(50, now - lastNow) : 16.7;
@@ -522,7 +523,7 @@ export const initShow = (api) => {
     }
     api.hideLimit();
     updateBar();
-    return {type: index.get(key), view, morph};
+    return {type: index.get(key), view, morph, slow: budget.target};
   };
 
   const drawn = [];

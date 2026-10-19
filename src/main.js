@@ -664,6 +664,7 @@ const toggleGallery = (open = !galleryOpen()) => {
 let last = performance.now();
 let lastKey = '';
 let landed = false;
+let showing = false; // the last frame was a show's
 // after a morph, the full-depth picture crossfades in over this many frames, ending fully replaced
 const LAND_STEPS = 12;
 let landStep = 0;
@@ -841,6 +842,10 @@ const tick = (now) => {
   // a playing show is a function of song time: its fractal, view and morph are used as they are, with no easing
   const shown = cantus?.playing() ? cantus.frame(now) : null;
   if (shown) {
+    // each show starts with the full morph budget; a slow frame during a morph lowers it for the rest of the show, as
+    // a slow frame does in a morph by hand
+    if (!showing) morphIters = MORPH_ITERS;
+    if (shown.morph && dt * 1000 > shown.slow && morphIters > 160) morphIters = Math.round(morphIters * 0.75);
     if (shown.type !== state.type) {
       state.type = shown.type;
       renderParam();
@@ -859,6 +864,7 @@ const tick = (now) => {
     const still = Math.abs(d.cx - v.cx) / v.span < 1e-4 && Math.abs(d.cy - v.cy) / v.span < 1e-4 && Math.abs(d.span / v.span - 1) < 1e-4;
     if (still) Object.assign(v, d);
   }
+  showing = !!shown;
   if (state.morph && !shown) {
     // the formula and the view travel together, on one eased clock
     const m = state.morph;
