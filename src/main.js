@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=25';
-import {spots} from './spots.js?v=25';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=25';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=26';
+import {spots} from './spots.js?v=26';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=26';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -128,7 +128,7 @@ const interruptShow = () => cantus?.interrupt();
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=25', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=26', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -935,6 +935,7 @@ const tick = (now) => {
 // with debug=1 in the link, a line at the top shows the frame rate, the 95th percentile frame time, the picture's
 // detail and, during a song, how far the picture is from the sound. It is how to measure a phone
 const debugOn = /(?:^#|&)debug=1(?:&|$)/.test(location.hash);
+document.body.classList.toggle('debug-on', debugOn);
 const debugTimes = new Float64Array(240);
 let debugCount = 0;
 let debugShown = 0;
@@ -1389,7 +1390,7 @@ const loadHash = () => {
 
 const openSong = async () => {
   if (!cantus) {
-    cantusLoading ||= import('./cantus/show.js?v=25').then((m) =>
+    cantusLoading ||= import('./cantus/show.js?v=26').then((m) =>
       m.initShow({
         state,
         fractals,

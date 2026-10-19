@@ -4,11 +4,11 @@
 // sounding note is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls
 // into it through a few small hooks; everything it needs from the page comes in `api`.
 
-import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=25';
-import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=25';
-import {Transport} from './scheduler.js?v=25';
-import {loadPoints} from './points.js?v=25';
-import {paramOf} from '../fractals.js?v=25';
+import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=26';
+import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=26';
+import {Transport} from './scheduler.js?v=26';
+import {loadPoints} from './points.js?v=26';
+import {paramOf} from '../fractals.js?v=26';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -258,7 +258,7 @@ export const initShow = (api) => {
       if (part === 'drums') {
         const where = document.createElement('span');
         where.className = 'c-where';
-        where.textContent = 'On the fractal on screen';
+        where.textContent = settings.layout === 'one' ? 'On the fractal on screen' : 'Fractal on screen';
         li.appendChild(where);
       } else {
         // with a set list every part plays the fractal on screen

@@ -1383,6 +1383,10 @@ body.show-on .hint {
     border-radius: 16px;
     transition: opacity 0.2s, transform 0.25s;
   }
+  /* with debug=1 the frame time line takes the top edge, and the card moves down to make room */
+  body.debug-on .info {
+    top: calc(var(--gap) + 12px);
+  }
   .name {
     font-size: 19px;
   }

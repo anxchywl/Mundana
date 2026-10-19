@@ -43,14 +43,28 @@ it. Below that you choose how many voices play at once, and for each part its fr
 (its period) and whether it plays at all. By default the melody and the chords play on the Mandelbrot set, the bass on
 the Multibrot, and the drums on the fractal on screen. The file is read in your browser and never leaves your device.
 
+Fractals: by default the whole song plays on one fractal. You can also give each section of the song its own
+fractal, from a list you can change (it starts with the Mandelbrot set, the Multibrot, the Burning ship, the
+logistic set and the inverted Mandelbrot set), or change fractal every few bars, 4 to 32. Mundana finds the sections
+itself: where the time signature or the tempo changes, and where the notes and how busy they are change, in sections
+of at least 8 bars; a section that comes back gets the same letter. The picture morphs from one fractal into the next
+and lands on the first beat of the bar. With a list, every part plays on the fractal on screen. The camera follows
+the music phrase by phrase: it frames the notes that are sounding, holds each framing for at least a second and a
+half, and glides to the next. With reduced motion turned on in your system, it cuts instead of gliding or morphing.
+
 Voices: the melody always has one to itself. The bass, the chords and the drums share the others, 3 by default and up
 to 5. When a chord needs more voices than are free, it keeps its lowest note, then its top note, its third and its
 seventh; a note that loses its voice to a newer one comes back when a voice is free again. The panel says how many
 notes were left out.
 
-Limits: MIDI files up to 4 MB, songs up to 10 minutes and 20,000 notes, at most 6 voices (4 by default). Notes
-shorter than 40 ms are joined to the next or dropped, and notes too high or too low move by whole octaves; the panel
-says how many. The camera stays still on one fractal for now.
+Limits: MIDI files up to 4 MB, songs up to 10 minutes and 20,000 notes, at most 6 voices (4 by default), at most 16
+sections. Notes shorter than 40 ms are joined to the next or dropped, and notes too high or too low move by whole
+octaves; the panel says how many. If the picture cannot keep up, it draws with less detail for a while; the sound
+is never touched.
+
+To see how smoothly a song plays on your device, add `#debug=1` to the address. A line at the top then shows the
+frames a second, the slowest frame times, the picture's detail, and how far the picture is from the sound, in
+milliseconds.
 
 ## What's inside
 
@@ -59,7 +73,8 @@ says how many. The camera stays still on one fractal for now.
 - **Smooth morphing** between fractals: every frame of the change is a real fractal in between
 - **Julia sets**, three colour styles, and a pitch control
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
-- **Play a song** from a MIDI file, melody, chords, bass and drums, on up to six voices at once
+- **Play a song** from a MIDI file, melody, chords, bass and drums, on up to six voices at once, with a camera that
+  follows the music and a new fractal for each section if you like
 - **Works on phones:** one finger plays, two fingers move and zoom
 
 ## Run it yourself
@@ -98,10 +113,10 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 | [`src/spots.js`](src/spots.js) | Points known to sound good, found by [`tools/find-spots.mjs`](tools/find-spots.mjs) |
 | [`src/cantus/points.js`](src/cantus/points.js) | Loads the point library: stable points for every note of every fractal, built by [`tools/build-points.mjs`](tools/build-points.mjs) |
 | [`src/cantus/midi.js`](src/cantus/midi.js) | Reads MIDI files: notes, tempo, time signatures, and which track plays which part |
-| [`src/cantus/timeline.js`](src/cantus/timeline.js) | The song as notes in time, with its checks and limits |
-| [`src/cantus/mapper.js`](src/cantus/mapper.js) | Gives every note a point and a speed that play it, and a voice to play it on; picks the drum sounds |
+| [`src/cantus/timeline.js`](src/cantus/timeline.js) | The song as notes in time, with its checks and limits, and the sections it falls into |
+| [`src/cantus/mapper.js`](src/cantus/mapper.js) | Gives every note a point and a speed that play it, and a voice to play it on; picks the drum sounds; plans which fractal is on screen, the morphs and the camera |
 | [`src/cantus/scheduler.js`](src/cantus/scheduler.js) | Sends each note to the audio thread just ahead of time, on the audio clock: play, pause, seek, loop |
-| [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song |
+| [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song, which keeps time with the sound |
 
 Want to add a fractal? Add it to `src/fractals.js` with both formulas, then run `node tools/find-spots.mjs` and copy
 its spots into `src/spots.js`. After any change to a formula or to `src/voice.js`, run `node tools/build-points.mjs`
