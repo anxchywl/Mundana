@@ -66,6 +66,21 @@ To see how smoothly a song plays on your device, add `#debug=1` to the address. 
 frames a second, the slowest frame times, the picture's detail, and how far the picture is from the sound, in
 milliseconds.
 
+### Fix the notes
+
+Press Edit notes in the song panel to see the song as a piano roll: time across, pitch up, the drums in a lane of
+their own at the bottom. On a computer it takes the lower part of the screen, so the fractal stays in view; on a phone
+it fills the screen. Click a note to select it, shift click to add one, or drag a box around several. Drag notes to
+move them (they snap to sixteenths of a beat; hold Alt to move freely), drag a note's right edge to make it longer or
+shorter, press the arrow keys to move them up or down (with Shift, by an octave), Delete to remove them, and 1 to 4 to
+make them melody, bass, chords or drums. Ctrl or Cmd Z undoes, up to 100 steps (fewer after changes to thousands of
+notes at once), and Shift with it redoes. Drag on the ruler at the top to choose a range and press Space to play it
+over and over; click the ruler to go to that moment. The wheel zooms, Shift and the wheel scrolls, and Alt and the
+wheel (or the wheel over the keys) moves up and down the pitches. On a phone, tap to select, press and hold to add a
+note, pinch to zoom and drag with two fingers to scroll; the buttons at the top do the rest. A song that is playing
+keeps playing while you edit, and plays your changes a moment later. A note never gets shorter than 40 ms or higher
+than the highest MIDI note, and notes the song had to move by octaves to play are marked with a small arrow.
+
 ## What's inside
 
 - **24 fractals in four families:** the Mandelbrot set and its cousins, the burning ship family, chaotic maps from
@@ -74,7 +89,7 @@ milliseconds.
 - **Julia sets**, three colour styles, and a pitch control
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
 - **Play a song** from a MIDI file, melody, chords, bass and drums, on up to six voices at once, with a camera that
-  follows the music and a new fractal for each section if you like
+  follows the music and a new fractal for each section if you like, and **fix its notes** in a piano roll
 - **Works on phones:** one finger plays, two fingers move and zoom
 
 ## Run it yourself
@@ -116,6 +131,7 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 | [`src/cantus/timeline.js`](src/cantus/timeline.js) | The song as notes in time, with its checks and limits, and the sections it falls into |
 | [`src/cantus/mapper.js`](src/cantus/mapper.js) | Gives every note a point and a speed that play it, and a voice to play it on; picks the drum sounds; plans which fractal is on screen, the morphs and the camera |
 | [`src/cantus/scheduler.js`](src/cantus/scheduler.js) | Sends each note to the audio thread just ahead of time, on the audio clock: play, pause, seek, loop |
+| [`src/cantus/editor.js`](src/cantus/editor.js) | The piano roll: draws the notes, and every change to them, with undo |
 | [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song, which keeps time with the sound |
 
 Want to add a fractal? Add it to `src/fractals.js` with both formulas, then run `node tools/find-spots.mjs` and copy
