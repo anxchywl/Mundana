@@ -69,3 +69,20 @@ test('time and beat convert both ways, linear between beats', () => {
   assert.equal(timeToBeat(4, beats), 5);
   for (const b of [0, 0.3, 1.7, 2.5, 3.9]) assert.ok(Math.abs(timeToBeat(beatToTime(b, beats), beats) - b) < 1e-12);
 });
+
+test('audio notes keep their measured pitch, and an estimated tempo says so; nothing else is added', () => {
+  const t = validateTimeline({
+    notes: [
+      {start: 0, duration: 0.5, midi: 61, midiMeasured: 60.83, velocity: 0.5, part: 'melody', confidence: 0.7, source: 'audio'},
+      {start: 1, duration: 0.5, midi: 62, midiMeasured: 'x', velocity: 0.5, part: 'melody', confidence: 0.7, source: 'audio'},
+    ],
+    tempo: {bpm: 100, beats: [0, 0.6], estimated: true},
+    duration: 2,
+    title: 'Heard',
+  });
+  assert.equal(t.notes[0].midiMeasured, 60.83);
+  assert.equal('midiMeasured' in t.notes[1], false);
+  assert.equal(t.tempo.estimated, true);
+  const m = validateTimeline({notes: [], tempo: {bpm: 100, beats: [], estimated: 'yes'}, duration: 1, title: ''});
+  assert.equal('estimated' in m.tempo, false);
+});

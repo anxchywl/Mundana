@@ -1,8 +1,8 @@
 // The song as notes in time: the Timeline every part of Cantus reads. A MIDI file (and later an audio file or the
 // editor) produces one; the mapper turns it into presses. Times are in seconds from the start of the song.
 //
-// Note = {start, duration, midi, velocity, part, drum?, confidence, source, track?}
-// Timeline = {notes, tempo: {bpm, beats}, bars, sections, duration, title, tracks?}
+// Note = {start, duration, midi, velocity, part, drum?, confidence, source, track?, midiMeasured?}
+// Timeline = {notes, tempo: {bpm, beats, estimated?}, bars, sections, duration, title, tracks?}
 //
 // Everything here is plain JavaScript, so Node runs it in the tests.
 
@@ -50,6 +50,8 @@ export const checkNote = (n, duration) => {
   if (out.part === 'drums') out.drum = DRUMS.includes(n.drum) ? n.drum : 'other';
   if (n.track !== undefined) out.track = num(n.track, 0, 4095, 'A note track');
   if (Number.isInteger(n.id) && n.id >= 0 && n.id <= MAX_ID) out.id = n.id;
+  // a note heard in an audio file keeps the pitch it was measured at, for display
+  if (Number.isFinite(n.midiMeasured) && n.midiMeasured >= 0 && n.midiMeasured <= 127) out.midiMeasured = n.midiMeasured;
   return out;
 };
 
@@ -91,7 +93,7 @@ export const validateTimeline = (t) => {
   if (sections.length > MAX_SECTIONS) throw new Error('This song has more than 64 sections.');
   const out = {
     notes,
-    tempo: {bpm: Number.isFinite(tempo.bpm) && tempo.bpm > 0 ? Math.min(1000, tempo.bpm) : 120, beats},
+    tempo: {bpm: Number.isFinite(tempo.bpm) && tempo.bpm > 0 ? Math.min(1000, tempo.bpm) : 120, beats, ...(tempo.estimated === true ? {estimated: true} : {})},
     sections: sections.length ? sections : [{start: 0, end: duration, label: 'Song'}],
     duration,
     title: cleanTitle(t.title),
