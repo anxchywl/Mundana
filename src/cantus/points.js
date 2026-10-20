@@ -8,7 +8,7 @@
 //   chaos:  {point, radius, level, bright}, bright here in Hz
 //   escape: {point, steps}, steps the number of steps before the orbit leaves
 
-const URL_ = new URL('./points.json?v=30', import.meta.url);
+const URL_ = new URL('./points.json?v=31', import.meta.url);
 const MAX_BYTES = 1 << 20; // the library is about 100 KB; anything far bigger is not ours
 
 const allFinite = (row, n) => Array.isArray(row) && row.length === n && row.every(Number.isFinite);
