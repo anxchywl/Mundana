@@ -700,7 +700,7 @@ export const framesToNotes = (track, {lo, hi, part, onsets = [], keep = YIN.keep
     run = {first: k, last: k, vals: [p], sorted: [p], conf: conf[k], level: rms[k], struck: after > NOTES.rise * before};
   }
   close();
-  return mergeShort(cleanNotes(notes, {lo: midiOfHz(lo), hi: midiOfHz(hi), grid, dense, octaves: part === 'melody' || dense})).notes;
+  return mergeShort(cleanNotes(notes, {lo: midiOfHz(lo), hi: midiOfHz(hi), grid, dense})).notes;
 };
 
 /** the weighted median of `values` (weights alike in length) */
@@ -721,17 +721,16 @@ const weightedMedian = (values, weights) => {
  * - a note under 30 ms after the one before it, not struck (no rise in level into it), at the same pitch or one or
  *   two octaves from it, is that note held (read at another octave as it fades or as the bass comes in): it joins
  *   it, at its pitch
- * - octaves, when `octaves` (the melody, and the bass of a dense mix): a note 7 or more semitones from the median of
- *   the notes within 4 s around it (weighted by length) moves by an octave when that brings it at least 5 semitones
- *   closer and keeps it in range; a guitar's second harmonic, or a melody read at the period it shares with the bass,
- *   comes back to its line. Bass lines do jump octaves: on the test songs this lowered the bass's score (Twinkle 1.00
- *   to 0.92), on a distorted rock recording it halved the bass's jumps of 7 semitones or more
+ * - octaves: a note 7 or more semitones from the median of the notes within 4 s around it (weighted by length) moves
+ *   by an octave when that brings it at least 5 semitones closer and keeps it in range; a guitar's second harmonic,
+ *   or a melody read at the period it shares with the bass, comes back to its line. A bass line's own octave leaps
+ *   are mostly shorter than the notes around them, so they stay
  * - notes under `NOTES.min` (150 ms) go, unless as sure as `NOTES.sure` (0.9): the short ones are mostly overtones
  *   and attacks of other instruments, and a show of blips sounds worse than a show of fewer notes. In a `dense` mix
  *   every short note goes, and so does any note less sure than `NOTES.denseGate` (0.7)
  * - a start within 40 ms of the `grid` (each beat and halfway between, eighth notes) moves onto it, its end kept
  */
-export const cleanNotes = (input, {lo = 0, hi = 127, grid = [], dense = false, octaves = true} = {}) => {
+export const cleanNotes = (input, {lo = 0, hi = 127, grid = [], dense = false} = {}) => {
   const notes = [];
   for (const n of input.map((x) => ({...x})).sort((a, b) => a.start - b.start)) {
     const last = notes[notes.length - 1];
@@ -756,7 +755,7 @@ export const cleanNotes = (input, {lo = 0, hi = 127, grid = [], dense = false, o
       vals.push(orig[j]);
       ws.push(notes[j].duration);
     }
-    if (!octaves || !vals.length) continue;
+    if (!vals.length) continue;
     const med = weightedMedian(vals, ws);
     const off = Math.abs(n.midi - med);
     if (off < o.far) continue;

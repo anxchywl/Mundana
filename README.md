@@ -69,7 +69,7 @@ agree.
 Limits: MIDI files up to 4 MB, recordings up to 50 MB, songs up to 10 minutes and 20,000 notes, at most 6 voices (4 by default), at most 16
 sections. Notes shorter than 40 ms are joined to the next or dropped, and notes too high or too low move by whole
 octaves; the panel says how many. From a recording, melody and bass notes shorter than 150 ms are dropped unless they
-are very clear, a melody note an octave away from its neighbours moves back to them, and note starts within 40 ms of
+are very clear, a note an octave away from its neighbours moves back to them, and note starts within 40 ms of
 an eighth note move onto it. A dense band mix, such as a rock song with distorted guitars, plays simple: chords, bass
 and drums, with the melody muted (its melody is mostly the guitars' overtones), and only the surest notes over 150 ms.
 Unmute the melody to hear it anyway. If the picture cannot keep up, it draws with less detail for a while; the sound
