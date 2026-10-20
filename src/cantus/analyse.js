@@ -10,6 +10,7 @@
 //   beatTrack     the beats, by dynamic programming (Ellis 2007)
 //   yinTrack      the pitch of every frame (de Cheveigne and Kawahara 2002), the difference function through the FFT
 //   framesToNotes pitched frames grouped into notes
+//   cleanNotes    octaves fixed, short notes dropped, starts on the eighth note grid
 //   chordsOf      a chord per beat from chroma and templates, smoothed by Viterbi
 //   downbeatPhase which beat of four starts a bar
 //   drumHits      percussive onsets, classified by where their energy is
@@ -31,7 +32,9 @@ export const TEMPO = {window: 8, centre: 120, octaves: 1, min: 60, max: 200, tig
 // its octave below. The threshold is 0.4, the same bound as a frame kept as voiced (confidence 0.6): with 0.15 the
 // first dip under it in a band was most often the period melody and bass share, not the melody's own
 export const YIN = {window: 1024, hop: 220, threshold: 0.4, keep: 0.6, melody: [80, 1400], melodySearch: [80, 2000], bass: [40, 260], bassSearch: [40, 1000], cut: 250, decimate: 4, bassWindow: 256};
-export const NOTES = {median: 5, stay: 0.5, snap: 0.06, late: 0.25, rise: 1.3, echo: 0.15};
+// min: the shortest note kept from a recording (150 ms) unless its confidence is `sure`; in a dense mix no note under
+// it is kept, nor any under `denseGate`. grid: how far a start moves onto an eighth note
+export const NOTES = {median: 5, stay: 0.5, octave: {window: 4, far: 7, gain: 5}, join: 0.03, min: 0.15, sure: 0.9, denseGate: 0.7, grid: 0.04, snap: 0.06, late: 0.25, rise: 1.3, echo: 0.15};
 // chords: a template whose root is the bass note under the beat gains 0.1, since a bass most often plays the root.
 // Log emissions are 40 times the similarity: two changes cost 2 log(0.9 / (0.1 / 84)), so a chord of two beats is
 // found when its similarity is about 0.17 better (with 20 it took 0.33, and two beat chords merged)
@@ -42,7 +45,7 @@ export const CHORDS = {lo: 60, hi: 5000, quiet: 0.1, stay: 0.9, sharp: 40, margi
 // bass's pitch is not trusted
 export const DRUM_BANDS = {kick: 150, mid: 2000, hat: 5000, spread: 1500, ratio: 3, broad: 1200, low: 0.5, above: 0.1, around: 15, ring: 0.12};
 export const SECTIONS = {kernel: 32, sigma: 8, minBars: 8, max: 16, same: 0.9};
-export const SONG = {voiced: 0.05, noisy: 0.4, silent: 1e-3};
+export const SONG = {voiced: 0.05, noisy: 0.4, silent: 1e-3, dense: {voiced: 0.7, percussive: 0.12}};
 
 export const QUALITIES = {maj: [0, 4, 7], min: [0, 3, 7], 7: [0, 4, 7, 10], m7: [0, 3, 7, 10], maj7: [0, 4, 7, 11], sus2: [0, 2, 7], sus4: [0, 5, 7]};
 const QUALITY_KEYS = Object.keys(QUALITIES);
@@ -576,9 +579,10 @@ const midiOfHz = (f) => 69 + 12 * Math.log2(f / 440);
  * where an onset brings a rise in level. A note starts at an onset within 60 ms of its first frame, if there is one,
  * or else at the latest onset up to 250 ms before it. Frames in the `skip` spans ([from, to] seconds) are passed over.
  * `midi` is rounded, `midiMeasured` keeps the measured pitch; velocity is the mean frame level over the song's 95th
- * percentile, confidence the mean frame confidence. Notes under 40 ms are joined or dropped (mergeShort).
+ * percentile, confidence the mean frame confidence. Then cleanNotes (octaves, held notes, short notes, the eighth
+ * note `grid`, stricter when `dense`), and notes under 40 ms are joined or dropped (mergeShort).
  */
-export const framesToNotes = (track, {lo, hi, part, onsets = [], keep = YIN.keep, skip = []}) => {
+export const framesToNotes = (track, {lo, hi, part, onsets = [], keep = YIN.keep, skip = [], grid = [], dense = false}) => {
   const {hz, conf, rms, hop, sr} = track;
   const K = hz.length;
   const dt = hop / sr;
@@ -635,6 +639,7 @@ export const framesToNotes = (track, {lo, hi, part, onsets = [], keep = YIN.keep
       part,
       confidence: Math.max(0, Math.min(1, run.conf / run.vals.length)),
       source: 'audio',
+      struck: run.struck,
     });
     run = null;
   };
@@ -686,10 +691,98 @@ export const framesToNotes = (track, {lo, hi, part, onsets = [], keep = YIN.keep
     if (run && onset && (k - run.first) * dt < NOTES.echo && Math.abs(p - runMedian()) <= NOTES.stay) run = null;
     close();
     onset = false;
-    run = {first: k, last: k, vals: [p], sorted: [p], conf: conf[k], level: rms[k]};
+    // struck: the level rises into it, as at a new attack (an onset alone is not enough: in a mix the hats leak into
+    // the harmonic part)
+    let before = Infinity;
+    for (let j = Math.max(0, k - 4); j < k; j++) before = Math.min(before, rms[j]);
+    let after = 0;
+    for (let j = k; j < Math.min(K, k + 3); j++) after = Math.max(after, rms[j]);
+    run = {first: k, last: k, vals: [p], sorted: [p], conf: conf[k], level: rms[k], struck: after > NOTES.rise * before};
   }
   close();
-  return mergeShort(notes).notes;
+  return mergeShort(cleanNotes(notes, {lo: midiOfHz(lo), hi: midiOfHz(hi), grid, dense, octaves: part === 'melody' || dense})).notes;
+};
+
+/** the weighted median of `values` (weights alike in length) */
+const weightedMedian = (values, weights) => {
+  const order = values.map((_, i) => i).sort((a, b) => values[a] - values[b]);
+  let total = 0;
+  for (const w of weights) total += w;
+  let run = 0;
+  for (const i of order) {
+    run += weights[i];
+    if (run >= total / 2) return values[i];
+  }
+  return NaN;
+};
+
+/**
+ * Notes of one line made playable (pitches `lo` to `hi` in MIDI, fractional):
+ * - a note under 30 ms after the one before it, not struck (no rise in level into it), at the same pitch or one or
+ *   two octaves from it, is that note held (read at another octave as it fades or as the bass comes in): it joins
+ *   it, at its pitch
+ * - octaves, when `octaves` (the melody, and the bass of a dense mix): a note 7 or more semitones from the median of
+ *   the notes within 4 s around it (weighted by length) moves by an octave when that brings it at least 5 semitones
+ *   closer and keeps it in range; a guitar's second harmonic, or a melody read at the period it shares with the bass,
+ *   comes back to its line. Bass lines do jump octaves: on the test songs this lowered the bass's score (Twinkle 1.00
+ *   to 0.92), on a distorted rock recording it halved the bass's jumps of 7 semitones or more
+ * - notes under `NOTES.min` (150 ms) go, unless as sure as `NOTES.sure` (0.9): the short ones are mostly overtones
+ *   and attacks of other instruments, and a show of blips sounds worse than a show of fewer notes. In a `dense` mix
+ *   every short note goes, and so does any note less sure than `NOTES.denseGate` (0.7)
+ * - a start within 40 ms of the `grid` (each beat and halfway between, eighth notes) moves onto it, its end kept
+ */
+export const cleanNotes = (input, {lo = 0, hi = 127, grid = [], dense = false, octaves = true} = {}) => {
+  const notes = [];
+  for (const n of input.map((x) => ({...x})).sort((a, b) => a.start - b.start)) {
+    const last = notes[notes.length - 1];
+    const apart = last ? Math.abs(last.midi - n.midi) : -1;
+    if (last && !n.struck && (apart === 0 || apart === 12 || apart === 24) && n.start - (last.start + last.duration) < NOTES.join && n.start >= last.start) {
+      last.duration = Math.max(last.duration, n.start + n.duration - last.start);
+      continue;
+    }
+    notes.push(n);
+  }
+  const o = NOTES.octave;
+  const orig = notes.map((n) => n.midi);
+  for (let i = 0; i < notes.length; i++) {
+    const n = notes[i];
+    const vals = [];
+    const ws = [];
+    for (let j = i - 1; j >= 0 && n.start - notes[j].start <= o.window; j--) {
+      vals.push(orig[j]);
+      ws.push(notes[j].duration);
+    }
+    for (let j = i + 1; j < notes.length && notes[j].start - n.start <= o.window; j++) {
+      vals.push(orig[j]);
+      ws.push(notes[j].duration);
+    }
+    if (!octaves || !vals.length) continue;
+    const med = weightedMedian(vals, ws);
+    const off = Math.abs(n.midi - med);
+    if (off < o.far) continue;
+    for (const shift of [12, -12]) {
+      const m = n.midi + shift;
+      if (m < lo - 0.5 || m > hi + 0.5 || off - Math.abs(m - med) < o.gain) continue;
+      n.midi = m;
+      if (n.midiMeasured !== undefined) n.midiMeasured = Math.round((n.midiMeasured + shift) * 100) / 100;
+      break;
+    }
+  }
+  const gate = dense ? NOTES.denseGate : 0;
+  const sure = dense ? Infinity : NOTES.sure;
+  const kept = notes.filter((n) => n.confidence >= gate && (n.duration >= NOTES.min || n.confidence >= sure));
+  let g = 0;
+  for (const n of kept) {
+    delete n.struck;
+    while (g + 1 < grid.length && grid[g + 1] <= n.start) g++;
+    let best = null;
+    for (const t of [grid[g], grid[g + 1]]) if (t !== undefined && Math.abs(t - n.start) <= NOTES.grid && (best === null || Math.abs(t - n.start) < Math.abs(best - n.start))) best = t;
+    if (best === null) continue;
+    const end = n.start + n.duration;
+    n.start = Math.max(0, best);
+    n.duration = Math.max(0.001, end - n.start);
+  }
+  return kept;
 };
 
 /**
@@ -1136,15 +1229,34 @@ export const analyseAudio = (samples, sr = SR, onProgress = () => {}) => {
   const voicedShare = sounding ? voiced / sounding : 0;
   const confidence = sounding ? confSum / sounding : 0;
   const drumsOnly = voicedShare < SONG.voiced;
+  // the share of the sound's energy in the percussive part: drums, and the noise of distorted guitars
+  let percE = 0;
+  let allE = 0;
+  for (let f = 0; f < spec.F; f++) {
+    allE += spec.energy[f];
+    for (let b = 0; b < 4; b++) percE += spec.band[f * 4 + b];
+  }
+  const percussive = allE > 0 ? percE / allE : 0;
+  // a dense mix (a band with distorted guitars): few frames with a clear pitch and much of the sound percussive. The
+  // melody heard in it is mostly other instruments' overtones, so the page plays it simple (melody muted) and the
+  // notes of both lines must be surer. On the test songs the voiced share is 0.98 or more and the percussive share
+  // 0.06 or less; on a distorted rock recording 0.40 and 0.26
+  const dense = !drumsOnly && voicedShare < SONG.dense.voiced && percussive >= SONG.dense.percussive;
 
   // the drums first: a kick rings low, so the bass's pitch is not trusted for a moment after one
   st = stage('drums');
   const drums = drumHits(percOnsets, spec);
   st.end();
   const kicks = drums.filter((d) => d.drum === 'kick').map((d) => [d.start - 0.01, d.start + DRUM_BANDS.ring]);
+  // eighth notes: each beat and the point halfway to the next
+  const grid = [];
+  beatTimes.forEach((t, i) => {
+    grid.push(t);
+    if (i + 1 < beatTimes.length) grid.push((t + beatTimes[i + 1]) / 2);
+  });
   const {melody, bass} = separateLines(
-    framesToNotes(melTrack, {lo: YIN.melody[0], hi: YIN.melody[1], part: 'melody', onsets: harmOnsets}),
-    framesToNotes(bassTrack, {lo: YIN.bass[0], hi: YIN.bass[1], part: 'bass', onsets: harmOnsets, skip: kicks}),
+    framesToNotes(melTrack, {lo: YIN.melody[0], hi: YIN.melody[1], part: 'melody', onsets: harmOnsets, grid, dense}),
+    framesToNotes(bassTrack, {lo: YIN.bass[0], hi: YIN.bass[1], part: 'bass', onsets: harmOnsets, skip: kicks, grid, dense}),
   );
 
   // chords, and the bars from the beats
@@ -1214,7 +1326,10 @@ export const analyseAudio = (samples, sr = SR, onProgress = () => {}) => {
   const names = {melody: 'Melody', bass: 'Bass', chords: 'Chords', drums: 'Drums'};
   const used = parts.filter((p) => notes.some((n) => n.part === p));
   const trackOf = new Map(used.map((p, i) => [p, i]));
-  notes = notes.map((n) => ({...n, track: trackOf.get(n.part)}));
+  // times to the millisecond, as a song link keeps them: a note snapped to the grid can start 1e-14 s from a drum hit,
+  // and the two must sort the same way before and after a link
+  const ms = (t) => Math.round(t * 1000) / 1000;
+  notes = notes.map((n) => ({...n, start: ms(n.start), duration: Math.max(0.04, ms(n.duration)), track: trackOf.get(n.part)}));
   const timeline = validateTimeline({
     notes,
     tempo: {bpm, beats: beatTimes, estimated: true},
@@ -1233,6 +1348,8 @@ export const analyseAudio = (samples, sr = SR, onProgress = () => {}) => {
       confidence,
       drumsOnly,
       noisy: !drumsOnly && confidence < SONG.noisy,
+      dense,
+      percussive,
       chords: spans.map(({start, end, root, quality}) => ({start, end, root, quality})),
       onsets: fullOnsets.length,
       times,
