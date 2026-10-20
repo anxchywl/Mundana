@@ -160,7 +160,7 @@ export class Transport {
   }
 
   pressAt(p, at, offset = 0) {
-    this.send({type: 'press', voice: p.voice, at, fractal: p.fractal, p: p.point, z0: p.z0, rate: p.rate, velocity: p.velocity, offset, releaseS: p.releaseS});
+    this.send({type: 'press', voice: p.voice, at, fractal: p.fractal, p: p.point, z0: p.z0, rate: p.rate, velocity: p.velocity, offset, releaseS: p.releaseS, attackS: p.attackS, drive: p.drive, gain: p.gain, tone: p.tone});
   }
 
   /** every note that is sounding at song time t, pressed at context time `at` as if it began `t - start` ago */

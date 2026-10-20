@@ -7,8 +7,8 @@
 // a song may use. Timed events wait in a ring per voice. Everything is allocated here, so the audio callback never
 // allocates, and a voice that is not sounding is skipped before any work per sample.
 
-import {Voice, Master} from './voice.js?v=31';
-import {fractals, paramOf} from './fractals.js?v=31';
+import {Voice, Master} from './voice.js?v=32';
+import {fractals, paramOf} from './fractals.js?v=32';
 
 const MAX_VOICES = 6;
 const DEFAULT_VOICES = 4;
@@ -16,6 +16,7 @@ const BLOCK = 128;
 const RING = 256;
 const PRESS = 1;
 const RELEASE = 2;
+const NUM = 13; // numbers kept per event
 const CLEAR_RELEASE_S = 0.015;
 
 /** pending timed events of one voice, oldest first, kept in order of their sample */
@@ -24,7 +25,7 @@ class Ring {
     this.frame = new Float64Array(RING);
     this.kind = new Uint8Array(RING);
     this.fractal = new Int16Array(RING);
-    this.num = new Float64Array(RING * 9); // param, px, py, z0x, z0y, rate, velocity, offset, releaseS
+    this.num = new Float64Array(RING * NUM); // param, px, py, z0x, z0y, rate, velocity, offset, releaseS, attackS, drive, gain, tone
     this.hasZ0 = new Uint8Array(RING);
     this.head = 0;
     this.size = 0;
@@ -35,7 +36,7 @@ class Ring {
     this.kind[to] = this.kind[from];
     this.fractal[to] = this.fractal[from];
     this.hasZ0[to] = this.hasZ0[from];
-    this.num.copyWithin(to * 9, from * 9, from * 9 + 9);
+    this.num.copyWithin(to * NUM, from * NUM, from * NUM + NUM);
   }
 
   /**
@@ -82,7 +83,7 @@ class OrbitVoice extends AudioWorkletProcessor {
     // reused for every press, so applying one allocates nothing here
     this.point = [0, 0];
     this.z0 = [0, 0];
-    this.opts = {z0: null, rate: 0, velocity: 1, offset: 0, releaseS: NaN};
+    this.opts = {z0: null, rate: 0, velocity: 1, offset: 0, releaseS: NaN, attackS: NaN, drive: NaN, gain: NaN, tone: NaN};
     this.port.onmessage = (e) => this.message(e.data);
   }
 
@@ -131,7 +132,7 @@ class OrbitVoice extends AudioWorkletProcessor {
     ring.fractal[i] = index;
     ring.hasZ0[i] = pair(m.z0) ? 1 : 0;
     const n = ring.num;
-    const o = i * 9;
+    const o = i * NUM;
     n[o] = finite(m.param, paramOf(fractals[index], {}));
     n[o + 1] = m.p[0];
     n[o + 2] = m.p[1];
@@ -141,6 +142,10 @@ class OrbitVoice extends AudioWorkletProcessor {
     n[o + 6] = finite(m.velocity, 1);
     n[o + 7] = finite(m.offset, 0);
     n[o + 8] = finite(m.releaseS, NaN);
+    n[o + 9] = finite(m.attackS, NaN);
+    n[o + 10] = finite(m.drive, NaN);
+    n[o + 11] = finite(m.gain, NaN);
+    n[o + 12] = finite(m.tone, NaN);
   }
 
   release(m) {
@@ -168,7 +173,7 @@ class OrbitVoice extends AudioWorkletProcessor {
       return;
     }
     const n = ring.num;
-    const o = i * 9;
+    const o = i * NUM;
     // a song note plays the fractal itself, held for its whole length
     voice.f = fractals[ring.fractal[i]];
     voice.fi = ring.fractal[i];
@@ -185,6 +190,10 @@ class OrbitVoice extends AudioWorkletProcessor {
     opts.velocity = n[o + 6];
     opts.offset = n[o + 7];
     opts.releaseS = n[o + 8];
+    opts.attackS = n[o + 9];
+    opts.drive = n[o + 10];
+    opts.gain = n[o + 11];
+    opts.tone = n[o + 12];
     voice.start(this.point, opts);
   }
 
@@ -225,7 +234,8 @@ class OrbitVoice extends AudioWorkletProcessor {
         voice.render(mixL, mixR, pos, len);
         if (voice.broke >= 0) reset = voice.broke;
       }
-      sounding++;
+      // the master shares out the level by power: a song's quieter parts take less of it (a hand press is 1)
+      sounding += voice.partGain * voice.partGain;
     }
     this.master.render(mixL, mixR, L, R, len, sounding, reset);
     return true;

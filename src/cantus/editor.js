@@ -4,7 +4,7 @@
 // show plans again from it. The top of this file is plain JavaScript, so Node runs it in the tests; initEditor is
 // the part that needs a page.
 
-import {checkNote, byTime, timeToBeat, beatToTime, PARTS, DRUMS, MAX_SECONDS, MIN_NOTE} from './timeline.js?v=31';
+import {checkNote, byTime, timeToBeat, beatToTime, PARTS, DRUMS, MAX_SECONDS, MIN_NOTE} from './timeline.js?v=32';
 
 export const MAX_STEPS = 100; // undo steps
 export const HISTORY_NOTES = 200000; // and at most this many changed notes kept for them (see History)

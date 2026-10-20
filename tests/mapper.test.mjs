@@ -4,7 +4,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {indexPoints} from '../src/cantus/points.js';
-import {planShow, pitchedFractals, drumPoints, settingsOf, RATE_MIN, RATE_MAX, RELEASE, DRUM} from '../src/cantus/mapper.js';
+import {planShow, pitchedFractals, drumPoints, settingsOf, RATE_MIN, RATE_MAX, RELEASE, DRUM, SOUND} from '../src/cantus/mapper.js';
 import {parseMidi} from '../src/cantus/midi.js';
 import {validateTimeline} from '../src/cantus/timeline.js';
 import {Host, SR, runHost} from './worklet-host.mjs';
@@ -224,4 +224,19 @@ test('a song of nothing but drums plays as drums', () => {
   const plan = planShow(fixture('drums-only.mid'), {}, points);
   assert.equal(plan.drumsOnly, true);
   assert.ok(plan.presses.length > 0 && plan.presses.every((p) => p.part === 'drums' && p.voice > 0));
+});
+
+test('each part sounds as SOUND says; a chord shares its gain among the tones sounding', () => {
+  const t = song(
+    [note(0, 72), note(0, 60, {part: 'chords'}), note(0, 64, {part: 'chords'}), note(0, 67, {part: 'chords'}), note(1, 60, {part: 'chords', duration: 0.5}), note(0, 40, {part: 'bass'})],
+    2,
+  );
+  const plan = planShow(t, {voices: 6}, points);
+  for (const p of plan.presses) {
+    for (const k of ['attackS', 'drive', 'tone']) assert.equal(p[k], SOUND[p.part][k]);
+    if (p.part !== 'chords') assert.equal(p.gain, SOUND[p.part].gain);
+  }
+  const chords = plan.presses.filter((p) => p.part === 'chords');
+  assert.deepEqual(chords.map((p) => p.gain), [SOUND.chords.gain / 3, SOUND.chords.gain / 3, SOUND.chords.gain / 3, SOUND.chords.gain]);
+  assert.ok(SOUND.melody.gain === 1 && Object.values(SOUND).every((s) => s.gain <= 1));
 });

@@ -15,7 +15,7 @@
 // prefers points inside the framing of its moment, so a fast passage stays in one framing instead of chasing every
 // note. cameraAt and morphAt read the picture back at any song time, so pause, seek and loop are right at once.
 
-import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=31';
+import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=32';
 
 export const RATE_MIN = RATE * 2 ** (-PITCH_DOWN / 12);
 export const RATE_MAX = RATE * 2 ** (PITCH_UP / 12);
@@ -57,7 +57,21 @@ export const MAX_SET = 16;
 export const EVERY = {min: 4, max: 32, value: 8};
 
 /** how long each part's notes take to die away after they end, in seconds */
-export const RELEASE = {melody: 0.04, chords: 0.08, bass: 0.03, drums: 0.015};
+export const RELEASE = {melody: 0.08, chords: 0.15, bass: 0.06, drums: 0.015};
+
+/**
+ * How each part sounds (Voice.start's options): the melody on top, the bass, drums and chords under it, so the tune
+ * is the thing you hear (measured on a 6 voice song: melody 2.7 dB over bass and drums, 5.5 dB over the chords; before,
+ * the chords were 6.6 dB over the melody); softer attacks and drive than a hand press, and a gentle low-pass (tone,
+ * Hz), since an orbit's corners give it many bright harmonics. Drums keep the hand press's sharp attack and full drive.
+ * The melody's gain stays 1, so a lone melody never reaches the master's limit.
+ */
+export const SOUND = {
+  melody: {gain: 1, attackS: 0.012, drive: 1, tone: 2200},
+  bass: {gain: 0.45, attackS: 0.008, drive: 1, tone: 1500},
+  chords: {gain: 0.3, attackS: 0.03, drive: 0.8, tone: 2200}, // gain for the whole chord, shared by its tones
+  drums: {gain: 0.35, attackS: 0.002, drive: 1.6, tone: 0},
+};
 
 /** each drum: its rate in steps a second and how long it sounds, whatever the file says */
 export const DRUM = {
@@ -508,6 +522,25 @@ const repick = (made, set, points, screenAt, windows, frames) => {
   }
 };
 
+/**
+ * A chord about as loud as one note however many tones it has: each chord press at SOUND.chords.gain over the number
+ * of chord presses sounding when it starts (tones that start together count together). Over the square root (as if
+ * the tones were unrelated) a chord of three was as loud as the melody on a 6 voice song: its tones share periods
+ * and fractals, so they add up more like one sound.
+ */
+const chordLevels = (presses) => {
+  const chords = presses.filter((p) => p.part === 'chords').sort((a, b) => a.time - b.time);
+  const active = [];
+  for (let i = 0; i < chords.length; ) {
+    const t = chords[i].time;
+    for (let k = active.length - 1; k >= 0; k--) if (active[k].time + active[k].duration <= t) active.splice(k, 1);
+    let j = i;
+    while (j < chords.length && chords[j].time === t) active.push(chords[j++]);
+    for (let k = i; k < j; k++) chords[k].gain = SOUND.chords.gain / active.length;
+    i = j;
+  }
+};
+
 /** One planning pass: every note gets a point and a voice. Every press made, in the order it was made, is in `made`,
  * with `src`: how its point was picked, for repick. */
 const assign = (timeline, set, points, screenAt) => {
@@ -534,6 +567,7 @@ const assign = (timeline, set, points, screenAt) => {
       period: b.c.period,
       midi: Math.round(note.midi),
       releaseS: RELEASE[part],
+      ...SOUND[part],
       src: {note, prev},
     };
     if (b.shift) press.moved = b.shift;
@@ -649,6 +683,7 @@ const assign = (timeline, set, points, screenAt) => {
           part: 'drums',
           drum: kind,
           releaseS: RELEASE.drums,
+          ...SOUND.drums,
           src: {drum: kind},
         };
         if (note.id !== undefined) press.id = note.id;
@@ -713,6 +748,7 @@ const assign = (timeline, set, points, screenAt) => {
     waiting.sort((a, b) => rank[a.press.part] - rank[b.press.part] || a.press.order - b.press.order || a.since - b.since);
   }
   resume(Infinity);
+  chordLevels(presses);
   for (const p of presses) {
     delete p.group;
     delete p.order;

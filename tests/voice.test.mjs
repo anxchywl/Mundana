@@ -126,3 +126,46 @@ test('releaseS sets how long the note takes to stop', () => {
   v.start([-0.1124342, -0.6810738]);
   assert.equal(v.releaseS, 0.1);
 });
+
+test('a song note sounds softer: its part gain, attack, drive and tone', () => {
+  const P = [-0.1124342, -0.6810738];
+  const z0 = settle('mandelbrot', P);
+  const play = (o) => {
+    const v = voiceOn('mandelbrot');
+    v.start(P, {z0, rate: 1320, ...o});
+    return renderVoice(v, 0.3, SR);
+  };
+  const plain = play({});
+  // gain comes after the saturator: half the gain is exactly half the sound
+  const half = play({gain: 0.5});
+  for (let i = 0; i < plain.L.length; i += 997) assert.ok(Math.abs(half.L[i] - plain.L[i] / 2) < 1e-6);
+  // a softer drive never swings further than the hand press, so a lone voice stays under the master's limit
+  const soft = play({drive: 1});
+  const peak = (x) => x.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+  assert.ok(peak(soft.L) <= 0.7 * Math.tanh(1.6) + 1e-9, `peak ${peak(soft.L)}`);
+  // the low-pass takes off the top of a note: its second difference, which grows with the square of frequency, falls
+  // against its level (measured 0.153 against 0.222 for period 2 at 440 Hz), and the pitch stays
+  const P2 = [-0.9524126, -0.1977292];
+  const bright = (o) => {
+    const v = voiceOn('mandelbrot');
+    v.start(P2, {z0: settle('mandelbrot', P2), rate: 880, ...o});
+    return renderVoice(v, 0.3, SR);
+  };
+  const rough = (x) => {
+    let d = 0;
+    for (let i = 2; i < x.length; i++) d += (x[i] - 2 * x[i - 1] + x[i - 2]) ** 2;
+    return d / rms(x) ** 2;
+  };
+  const sharp = bright({});
+  const dark = bright({tone: 1500});
+  assert.ok(rough(dark.L) < 0.75 * rough(sharp.L), `${rough(dark.L)} against ${rough(sharp.L)}`);
+  assert.ok(Math.abs(pitchOf([dark.L, dark.R], SR, {minHz: 100, maxHz: 2000}) / 440 - 1) < 0.01);
+  // a slower attack: the first 10 ms are quieter
+  const slow = play({attackS: 0.03});
+  assert.ok(rms(slow.L.subarray(0, 480)) < 0.5 * rms(plain.L.subarray(0, 480)));
+  // and the next note without options is a hand press again
+  const v = voiceOn('mandelbrot');
+  v.start(P, {z0, rate: 1320, gain: 0.3, drive: 1, tone: 1500, attackS: 0.05});
+  v.start(P, {z0, rate: 1320});
+  assert.deepEqual([v.partGain, v.drive, v.lp, v.attackS], [1, 1.6, 0, 0.004]);
+});

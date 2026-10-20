@@ -2,7 +2,7 @@
 // Timeline (src/cantus/timeline.js). A file is untrusted input, so every read is bounded by its chunk and by the
 // buffer, and every count is capped.
 
-import {validateTimeline, mergeShort, barsFrom, findSections, cleanTitle, MAX_BEATS, MAX_NOTES} from './timeline.js?v=31';
+import {validateTimeline, mergeShort, barsFrom, findSections, cleanTitle, MAX_BEATS, MAX_NOTES} from './timeline.js?v=32';
 
 export const MAX_BYTES = 4 * 1024 * 1024;
 export const MAX_TRACKS = 256;

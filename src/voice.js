@@ -9,7 +9,7 @@
 // soft limit. This is plain JavaScript with no audio API in it, so the audio worklet and Node (tests and tools) run the
 // same code.
 
-import {fractals, ESCAPE_SQ, RATE, clampRate} from './fractals.js?v=31';
+import {fractals, ESCAPE_SQ, RATE, clampRate} from './fractals.js?v=32';
 
 const CENTRE_N = 32; // orbit points averaged to find the centre the sound swings around
 const TARGET = 0.3; // level the automatic gain aims for
@@ -17,6 +17,8 @@ const MAX_GAIN = 24; // so a point that barely moves is not blown up into hiss
 const LEVEL_S = 0.05; // how quickly the automatic gain follows the orbit
 const ATTACK_S = 0.004;
 const RELEASE_S = 0.015;
+const DRIVE = 1.6; // how hard the saturator is driven
+const OUT = 0.7; // and the level after it
 const FADE_S = 0.6; // time for a fading note to fall to about a third
 const VELOCITY_DB = 30; // velocity 0 to 1 spans this many decibels
 const GAIN_S = 0.02; // how quickly the master gain follows the number of sounding voices
@@ -58,6 +60,15 @@ export class Voice {
     // the sample of the last render where the sound broke (a NaN), or -1; the master path starts its filter afresh there
     this.broke = -1;
     this.releaseS = RELEASE_S;
+    // the sound of one note, set by each start (a song gives its parts their own; a hand press always the defaults):
+    // the attack, the drive of the saturator and the level after it, a level for the part, and a gentle low-pass
+    // (two one-pole stages; lp 0 is no filter) with its state, per channel
+    this.attackS = ATTACK_S;
+    this.drive = DRIVE;
+    this.out = OUT;
+    this.partGain = 1;
+    this.lp = 0;
+    this.lpState = new Float64Array(4);
     // called when the orbit escapes; the worklet forwards it to the page
     this.onEscape = null;
   }
@@ -90,8 +101,11 @@ export class Voice {
    * Begin a new orbit; while one is already sounding, the new one takes over without a fresh attack.
    * opts, all optional: z0 [x, y] starts the orbit there instead of where the fractal starts it (a point on the cycle
    * sounds its pitch from the first sample), velocity 0 to 1 (1 is full level, 0 is silent), rate in steps a second,
-   * offset in seconds (the note began that long ago, so the envelope starts as it would be by then), and releaseS,
-   * the length of the release for this voice from now on.
+   * offset in seconds (the note began that long ago, so the envelope starts as it would be by then), releaseS, the
+   * length of the release for this voice from now on, and for this note only: attackS (the attack's length), drive
+   * (how hard the saturator is pushed; a full swing comes out as at 1.6), gain (a level for the part, 0 to 1) and
+   * tone (a gentle low-pass at that many Hz, 12 dB an octave; 0 or none is no filter). Without them a note sounds as
+   * a hand press always has.
    */
   start(point, opts) {
     const o = opts && typeof opts === 'object' ? opts : null;
@@ -99,6 +113,15 @@ export class Voice {
     if (o && Number.isFinite(o.releaseS)) this.releaseS = Math.min(2, Math.max(0.001, o.releaseS));
     const velocity = o && Number.isFinite(o.velocity) ? Math.min(1, Math.max(0, o.velocity)) : 1;
     this.velocityGain = velocity > 0 ? 10 ** (((velocity - 1) * VELOCITY_DB) / 20) : 0;
+    this.attackS = o && Number.isFinite(o.attackS) ? Math.min(0.5, Math.max(0.001, o.attackS)) : ATTACK_S;
+    const drive = o && Number.isFinite(o.drive) ? Math.min(4, Math.max(0.25, o.drive)) : DRIVE;
+    this.drive = drive;
+    // a softer drive keeps the level a full swing (1) gave at 1.6, so a lone voice still never reaches the master's
+    // limit, and a quiet signal loses at most 2.4 dB (at drive 1)
+    this.out = drive === DRIVE ? OUT : (OUT * Math.tanh(DRIVE)) / Math.tanh(drive);
+    this.partGain = o && Number.isFinite(o.gain) ? Math.min(1, Math.max(0, o.gain)) : 1;
+    const tone = o && Number.isFinite(o.tone) && o.tone > 0 ? Math.min(this.sr * 0.45, Math.max(20, o.tone)) : 0;
+    this.lp = tone > 0 ? 1 - Math.exp((-2 * Math.PI * tone) / this.sr) : 0;
     // the same start and c as orbitOf, copied into this voice's own arrays, so a press allocates nothing
     const julia = this.julia;
     const z0 = o && finitePair(o.z0) ? o.z0 : julia ? point : this.f.start || point;
@@ -125,6 +148,8 @@ export class Voice {
     this.ringI = 0;
     this.phase = 0;
     if (!this.on || this.release < 1) this.attack = 0;
+    // a note from silence starts its filter from silence; one taking over a sounding note carries on from it
+    if (!this.on) this.lpState.fill(0);
     this.on = true;
     this.releasing = false;
     this.decay = 1;
@@ -132,7 +157,7 @@ export class Voice {
     this.level = 0.05;
     const offset = o && Number.isFinite(o.offset) && o.offset > 0 ? o.offset : 0;
     if (offset > 0) {
-      this.attack = Math.min(1, this.attack + offset / ATTACK_S);
+      this.attack = Math.min(1, this.attack + offset / this.attackS);
       if (this.fading) this.decay = Math.exp(-offset / FADE_S);
     }
   }
@@ -237,7 +262,7 @@ export class Voice {
         const sy = curve(p[1], p[3], p[5], p[7], t, t2, t3) - this.ringSum[1] / CENTRE_N;
         this.level += (sx * sx + sy * sy - this.level) * followLevel;
         const gain = Math.min(MAX_GAIN, TARGET / Math.sqrt(this.level + 1e-12));
-        this.attack = Math.min(1, this.attack + 1 / (ATTACK_S * sr));
+        this.attack = Math.min(1, this.attack + 1 / (this.attackS * sr));
         if (this.fading) this.decay *= fadeStep;
         if (this.releasing) {
           this.release -= 1 / (this.releaseS * sr);
@@ -249,8 +274,19 @@ export class Voice {
         }
         // velocity comes after the automatic level, so a soft note is quieter, not normalised back up
         const env = this.attack * this.decay * Math.max(0, this.release) * gain * this.velocityGain;
-        l = Math.tanh(1.6 * sx * env) * 0.7;
-        r = Math.tanh(1.6 * sy * env) * 0.7;
+        // the part's level after the saturator, so a louder part is not also a dirtier one
+        l = Math.tanh(this.drive * sx * env) * this.out * this.partGain;
+        r = Math.tanh(this.drive * sy * env) * this.out * this.partGain;
+        if (this.lp > 0) {
+          const a = this.lp;
+          const s = this.lpState;
+          s[0] += a * (l - s[0]);
+          s[1] += a * (s[0] - s[1]);
+          s[2] += a * (r - s[2]);
+          s[3] += a * (s[2] - s[3]);
+          l = s[1];
+          r = s[3];
+        }
       }
       // a NaN would stick in the filters and silence everything after it, so it never gets that far
       if (!Number.isFinite(l) || !Number.isFinite(r)) {
@@ -267,7 +303,8 @@ export class Voice {
 const soft = (v) => (v > LIMIT ? LIMIT + (1 - LIMIT) * Math.tanh((v - LIMIT) / (1 - LIMIT)) : v < -LIMIT ? -LIMIT + (1 - LIMIT) * Math.tanh((v + LIMIT) / (1 - LIMIT)) : v);
 
 /**
- * The master path: the voices' sum times 1 / sqrt(n) for n sounding voices (eased over 20 ms, so it never clicks),
+ * The master path: the voices' sum times 1 / sqrt(n) for n sounding voices, each counted as the square of its part's
+ * gain (a hand press, and every voice at gain 1, counts 1; eased over 20 ms, so it never clicks),
  * then one gentle high-pass, so a still point sits at zero, then a soft limit above 0.9, so no sample passes 1. With
  * one voice the gain is exactly 1 and the limit is not reached by a lone voice's level, so one voice sounds as before.
  */
