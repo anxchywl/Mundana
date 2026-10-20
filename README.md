@@ -57,6 +57,11 @@ to 5. When a chord needs more voices than are free, it keeps its lowest note, th
 seventh; a note that loses its voice to a newer one comes back when a voice is free again. The panel says how many
 notes were left out.
 
+Sound: in a song the melody is the loudest part, with the bass, the drums and the chords under it, so you hear the
+tune; a chord is about as loud as one note however many notes it has. Song notes start and end more gently than a
+press by hand, and are softened at the top, since an orbit's corners make many bright overtones. The drums stay sharp.
+Playing by hand sounds exactly as before.
+
 A recording is turned into notes in your browser, in the background, with a bar that shows how far it has got and a
 Cancel button: the melody, the bass, the chords, the drums, the beat and the sections. It takes a few seconds (a 4
 minute song took about 5 seconds on a recent laptop). The notes are approximate: good for a solo instrument or a clear
