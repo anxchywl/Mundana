@@ -125,7 +125,7 @@ export class Recorder {
     g.font = `500 ${px}px Jost, system-ui, sans-serif`;
     g.textBaseline = 'alphabetic';
     g.fillStyle = this.paper;
-    const caption = this.title ? `${this.title}  ·  Mundana` : 'Mundana';
+    const caption = this.title ? `“${this.title}” from Mundana` : 'Mundana';
     g.fillText(caption, Math.round(px * 1.2), h - Math.round(px * 1.1), w - px * 2.4);
     if (this.track.requestFrame) this.track.requestFrame();
     this.frames++;

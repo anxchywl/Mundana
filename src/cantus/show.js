@@ -4,15 +4,15 @@
 // sounding note is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls
 // into it through a few small hooks; everything it needs from the page comes in `api`.
 
-import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=32';
-import {validateTimeline, cleanTitle} from './timeline.js?v=32';
-import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=32';
-import {Transport} from './scheduler.js?v=32';
-import {loadPoints} from './points.js?v=32';
-import {paramOf} from '../fractals.js?v=32';
-import {initEditor} from './editor.js?v=32';
-import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=32';
-import {Recorder, support, pickType, estimate, sizeText, fileName, VIDEO_BITS, COUNT_IN_MS} from './record.js?v=32';
+import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=33';
+import {validateTimeline, cleanTitle} from './timeline.js?v=33';
+import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=33';
+import {Transport} from './scheduler.js?v=33';
+import {loadPoints} from './points.js?v=33';
+import {paramOf} from '../fractals.js?v=33';
+import {initEditor} from './editor.js?v=33';
+import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=33';
+import {Recorder, support, pickType, estimate, sizeText, fileName, VIDEO_BITS, COUNT_IN_MS} from './record.js?v=33';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -337,7 +337,7 @@ export const initShow = (api) => {
     }
     let worker;
     try {
-      worker = new Worker(new URL('./analyse-worker.js?v=32', import.meta.url), {type: 'module'});
+      worker = new Worker(new URL('./analyse-worker.js?v=33', import.meta.url), {type: 'module'});
     } catch {
       endWork();
       api.toast('This browser cannot hear songs in the background. Try another browser.');

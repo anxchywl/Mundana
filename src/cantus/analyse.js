@@ -18,8 +18,8 @@
 //
 // Every number that sets how a step behaves is in the constants below.
 
-import {RealFFT, hann} from './fft.js?v=32';
-import {mergeShort, validateTimeline, MAX_NOTES} from './timeline.js?v=32';
+import {RealFFT, hann} from './fft.js?v=33';
+import {mergeShort, validateTimeline, MAX_NOTES} from './timeline.js?v=33';
 
 export const SR = 22050;
 export const STFT = {n: 2048, hop: 256};
