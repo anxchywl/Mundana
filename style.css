@@ -1023,8 +1023,34 @@ body.show-on .cantus {
 .c-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 14px;
+}
+.c-edit:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* the debug report of what this browser can record */
+.c-support {
+  font-variant-numeric: tabular-nums;
+  white-space: pre-line;
+}
+/* while a show is recorded: a red dot before the time and size, and no pause or seek */
+.transport.recording .t-time::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  vertical-align: 1px;
+}
+.transport #t-play:disabled,
+.transport input:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 .cantus .c-actions .start {
   margin-top: 0;

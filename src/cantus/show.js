@@ -11,6 +11,7 @@ import {Transport} from './scheduler.js?v=28';
 import {loadPoints} from './points.js?v=28';
 import {paramOf} from '../fractals.js?v=28';
 import {initEditor} from './editor.js?v=28';
+import {Recorder, support, pickType, estimate, sizeText, fileName, VIDEO_BITS, COUNT_IN_MS} from './record.js?v=28';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -22,8 +23,9 @@ const PARTS = [
 ];
 
 /** the running show, for the browser checks and for later phases: `t` is the song time of the last frame, `page` the
- * page's state, `drift` every measured drift in ms, `heard` the report of the last audio file heard ({file, info}) */
-export const live = {plan: null, transport: null, audio: null, drift: [], budget: null, t: 0, page: null, editor: null, heard: null};
+ * page's state, `drift` every measured drift in ms, `heard` the report of the last audio file heard ({file, info}),
+ * `recorder` the last recording and `saved` its file ({bytes, type, frames, ms}) */
+export const live = {plan: null, transport: null, audio: null, drift: [], budget: null, t: 0, page: null, editor: null, heard: null, recorder: null, saved: null};
 
 /**
  * The frame budget of a show: frame times over a sliding 2 s window. When their 95th percentile is over the target
@@ -134,6 +136,8 @@ export const initShow = (api) => {
   const panelOpen = () => panel.classList.contains('open');
   const togglePanel = (open = !panelOpen()) => {
     if (open) api.closeSettings();
+    // the estimate follows a range chosen in the editor
+    if (open && timeline) renderRecord();
     panel.classList.toggle('open', open);
     document.body.classList.toggle('song-panel', open);
     $$('[data-act="song"]').forEach((b) => b.classList.toggle('on', open));
@@ -545,6 +549,7 @@ export const initShow = (api) => {
     $('#c-notes').textContent = notes.join(' ');
     $('#c-notes').hidden = !notes.length;
     $('#c-play').disabled = !plan?.presses.length;
+    renderRecord();
   };
 
   /**
@@ -728,6 +733,7 @@ export const initShow = (api) => {
 
   const updateBar = (force = false) => {
     if (!transport) return;
+    if (rec) return showRecording(force);
     const t = dragging ? Number(seek.value) : transport.now();
     if (!dragging) seek.value = String(t);
     const text = `${clock(t)} / ${clock(transport.duration)}`;
@@ -771,7 +777,7 @@ export const initShow = (api) => {
   };
 
   const pause = () => {
-    if (mode !== 'playing') return;
+    if (mode !== 'playing' || rec) return;
     transport.pause();
     stopOriginal();
     mode = 'paused';
@@ -781,6 +787,7 @@ export const initShow = (api) => {
   };
 
   function stopShow() {
+    if (rec) finishRecording();
     if (mode === 'off') return;
     transport?.stop();
     stopOriginal();
@@ -842,6 +849,7 @@ export const initShow = (api) => {
   $('#c-edit').addEventListener('click', () => editor.open());
 
   playBtn.addEventListener('click', () => (mode === 'playing' ? pause() : resume()));
+  $('#c-record').addEventListener('click', () => startRecording());
   $('#t-stop').addEventListener('click', stopShow);
   $('#c-play').addEventListener('click', playSong);
   seek.addEventListener('input', () => {
@@ -853,6 +861,127 @@ export const initShow = (api) => {
     transport?.seek(Number(seek.value));
     updateBar(true);
   });
+
+  // ---------- recording the show as a video ----------
+
+  const recType = pickType();
+  let rec = null; // {recorder, from, to, counting}
+
+  /** the panel's line: the size a recording would take, or why there is none; with #debug=1, what this browser can do */
+  const renderRecord = () => {
+    const btn = $('#c-record');
+    const note = $('#c-rec-note');
+    btn.disabled = !recType || !plan?.presses.length || !!rec;
+    if (!recType) note.textContent = 'Video recording is not supported in this browser. Try Chrome or Safari.';
+    else {
+      const range = editor.range();
+      const seconds = range ? range.b - range.a : timeline?.duration || 0;
+      note.textContent = `Recording takes the song in real time: about ${sizeText(estimate(seconds))} for ${clock(seconds)}, at ${VIDEO_BITS / 1e6} Mbps.`;
+    }
+    note.hidden = !timeline;
+    const box = $('#c-rec-support');
+    box.hidden = !api.debugOn;
+    if (api.debugOn) {
+      const s = support();
+      box.textContent = [
+        `captureStream ${s.captureStream ? 'yes' : 'no'}, requestFrame ${s.requestFrame ? 'yes' : 'no'}, MediaRecorder ${s.mediaRecorder ? 'yes' : 'no'}`,
+        ...s.types.map(([t, ok]) => `${ok ? 'yes' : 'no'}  ${t}`),
+        `records as ${recType || 'nothing'}`,
+      ].join('\n');
+    }
+  };
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /**
+   * Record video: from the start (or the start of the range chosen in the editor), after a count in of a second, the
+   * show plays in real time to the end (or the range's end) and is saved. Stop saves what there is so far.
+   */
+  const startRecording = async () => {
+    flushEdits();
+    if (!recType || !plan?.presses.length || rec) return;
+    const range = editor.range();
+    const from = range ? range.a : 0;
+    const to = range ? range.b : transport?.duration || timeline.duration;
+    togglePanel(false);
+    editor.close();
+    transport?.stop();
+    if (!(await begin())) return;
+    transport.setLoop(null);
+    transport.seek(from);
+    const a = api.audio();
+    const c = api.canvases();
+    let recorder;
+    try {
+      recorder = new Recorder({
+        fractal: c.fractal,
+        overlay: c.overlay,
+        ctx: a.ctx,
+        gain: a.gain,
+        title: timeline.title,
+        type: recType,
+        stageW: c.W,
+        stageH: c.H,
+        dpr: window.devicePixelRatio || 1,
+        paper: getComputedStyle(document.documentElement).getPropertyValue('--paper-2').trim(),
+      });
+    } catch (e) {
+      console.warn(e);
+      stopShow();
+      api.toast('The video could not start recording.');
+      return;
+    }
+    rec = {recorder, from, to, counting: true};
+    live.recorder = recorder;
+    bar.classList.add('recording');
+    playBtn.disabled = true;
+    seek.disabled = true;
+    renderRecord();
+    timeOut.textContent = 'Recording in 1';
+    await sleep(COUNT_IN_MS);
+    if (rec?.recorder !== recorder) return;
+    rec.counting = false;
+    recorder.start();
+    transport.play();
+  };
+
+  /** the elapsed time and the size so far, in the transport bar */
+  let recText = '';
+  const showRecording = (force) => {
+    if (rec.counting) return;
+    const text = `${clock(transport.now() - rec.from)}, ${sizeText(rec.recorder.bytes)}`;
+    if (force || text !== recText) timeOut.textContent = recText = text;
+  };
+
+  /** the recording ends: the file is built and saved, and everything it held is let go */
+  async function finishRecording(message) {
+    const r = rec;
+    if (!r) return;
+    rec = null;
+    bar.classList.remove('recording');
+    playBtn.disabled = false;
+    seek.disabled = false;
+    if (r.counting) {
+      r.recorder.release();
+      renderRecord();
+      return;
+    }
+    const blob = await r.recorder.stop();
+    live.saved = {bytes: blob.size, type: blob.type, frames: r.recorder.frames, ms: performance.now() - r.recorder.started};
+    const url = URL.createObjectURL(blob);
+    api.download(url, fileName(timeline?.title, recType));
+    // the download has its own copy once it starts
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    renderRecord();
+    api.toast(message || `Video saved, ${sizeText(blob.size)}.`);
+  }
+
+  /** after each frame of the page: the picture into the recording, and the end of a range */
+  const afterFrame = () => {
+    if (!rec || rec.counting || mode !== 'playing') return;
+    rec.recorder.frame();
+    if (transport.now() >= rec.to - 1e-6 && rec.to < transport.duration) stopShow();
+  };
 
   // ---------- the picture during a show ----------
 
@@ -909,7 +1038,8 @@ export const initShow = (api) => {
     // drift: the song time the last frame showed against the song time of the audio clock now that it is on screen
     const anchor = transport.anchors[transport.anchors.length - 1];
     if (prevT >= 0 && anchor === prevAnchor) addDrift((prevT - transport.songAtWall(now)) * 1000);
-    const t = transport.songAtWall(now + interval);
+    // on screen a frame is seen one interval after it is drawn; a recording takes it as it is drawn
+    const t = transport.songAtWall(rec && !rec.counting ? now : now + interval);
     frameT = t;
     live.t = t;
     prevT = t;
@@ -984,7 +1114,15 @@ export const initShow = (api) => {
 
   return {
     playing: () => mode === 'playing',
-    interrupt: pause,
+    recording: () => !!rec,
+    afterFrame,
+    /** the page interrupts the show; while recording only a hidden tab counts, and it saves what was recorded */
+    interrupt: (reason) => {
+      if (!rec) return pause();
+      if (reason !== 'hidden') return;
+      finishRecording('Recording stopped because the tab was hidden.');
+      stopShow();
+    },
     togglePanel,
     closePanel,
     editorOpen: () => editor.isOpen(),

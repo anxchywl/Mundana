@@ -121,7 +121,9 @@ const panBy = (dxPx, dyPx) => {
 let cantus = null;
 let cantusLoading = null;
 let showSwitching = false; // the show itself is switching fractal, so it does not pause
-const interruptShow = () => cantus?.interrupt();
+// `reason` is 'hidden' when the tab is hidden: a recording then stops and is saved; anything else pauses a show
+const interruptShow = (reason) => cantus?.interrupt(reason);
+const recording = () => !!cantus?.recording();
 
 // ---------- sound ----------
 
@@ -183,7 +185,7 @@ const startAudio = async () => {
 // a hidden tab keeps no audio thread awake
 document.addEventListener('visibilitychange', () => {
   if (!audio) return;
-  if (document.hidden) interruptShow();
+  if (document.hidden) interruptShow('hidden');
   if (document.hidden) audio.ctx.suspend().catch(() => {});
   else if (state.playing) audio.ctx.resume().catch(() => {});
 });
@@ -927,6 +929,8 @@ const tick = (now) => {
   }
 
   drawOverlay(now);
+  // a recording takes the picture once both canvases are drawn
+  cantus?.afterFrame();
   requestAnimationFrame(tick);
 };
 
@@ -973,6 +977,11 @@ const local = (e) => {
 };
 
 stage.addEventListener('pointerdown', (e) => {
+  // while a show is recorded the picture takes no input, so nothing but the song is in the video
+  if (recording()) {
+    e.preventDefault();
+    return;
+  }
   interruptShow();
   startAudio();
   closeSettings();
@@ -1054,6 +1063,7 @@ stage.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault();
+    if (recording()) return;
     const p = local(e);
     // pinch on a trackpad arrives as a ctrl-wheel with small deltas; a mouse wheel notch is about 100
     const scale = e.ctrlKey ? 0.012 : 0.0016;
@@ -1068,7 +1078,7 @@ stage.addEventListener(
 const overlayOpen = () => galleryOpen() || !$('#welcome').hidden;
 
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey || recording()) return;
   const k = e.key.toLowerCase();
   if (k === 'escape') {
     if (!$('#welcome').hidden) start();
@@ -1403,6 +1413,10 @@ const openSong = async () => {
         dimForSheets,
         desktop,
         drawOrbit,
+        download,
+        debugOn,
+        /** the picture's two canvases and the stage's size in CSS pixels, for a recording */
+        canvases: () => ({fractal: glCanvas, overlay, W, H}),
         hideLimit: () => ($('#limit').hidden = true),
         reducedMotion: () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
         /** build the picture's program for fractal a, or for a morph from a to b, ahead of time; and whether it is built */
