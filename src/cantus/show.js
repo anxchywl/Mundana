@@ -11,6 +11,7 @@ import {Transport} from './scheduler.js?v=29';
 import {loadPoints} from './points.js?v=29';
 import {paramOf} from '../fractals.js?v=29';
 import {initEditor} from './editor.js?v=29';
+import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=29';
 import {Recorder, support, pickType, estimate, sizeText, fileName, VIDEO_BITS, COUNT_IN_MS} from './record.js?v=29';
 
 const $ = (s) => document.querySelector(s);
@@ -196,8 +197,11 @@ export const initShow = (api) => {
   };
 
   /** a new song in the panel, from a MIDI file or from a recording (`heard` is then the analysis's report) */
-  const useSong = (t, heard) => {
+  const useSong = (t, heard, fromLink = false) => {
     stopShow();
+    linkText = '';
+    // the address held another song's link: it no longer says what is loaded
+    if (!fromLink && location.hash.startsWith('#cantus=')) history.replaceState(null, '', location.pathname + location.search);
     dropOriginal();
     timeline = t;
     audioSong = heard;
@@ -374,7 +378,8 @@ export const initShow = (api) => {
   const levelIn = $('#c-level');
 
   const syncOriginal = () => {
-    $('#c-orig-row').hidden = !audioSong;
+    // a song opened from a link has its notes but not its recording
+    $('#c-orig-row').hidden = !audioSong?.file;
     origBtn.textContent = original.on ? 'On' : 'Off';
     origBtn.setAttribute('aria-pressed', String(original.on));
     // only at normal speed: at any other the recording would drift from the notes
@@ -550,6 +555,7 @@ export const initShow = (api) => {
     $('#c-notes').hidden = !notes.length;
     $('#c-play').disabled = !plan?.presses.length;
     renderRecord();
+    renderShare();
   };
 
   /**
@@ -862,6 +868,71 @@ export const initShow = (api) => {
     updateBar(true);
   });
 
+  // ---------- song links ----------
+
+  const shareBtn = $('#c-share');
+  const linkNote = $('#c-link-note');
+  let linkText = '';
+  /** the button is there where this browser can make links; songs from audio say what the link holds */
+  const renderShare = () => {
+    shareBtn.hidden = !canShare();
+    shareBtn.disabled = !timeline;
+    const notes = [];
+    if (audioSong) notes.push('The link holds the notes of this song, not its sound.');
+    if (linkText) notes.push(linkText);
+    linkNote.textContent = notes.join(' ');
+    linkNote.hidden = !notes.length || !canShare();
+  };
+
+  /** Copy song link: the notes, parts and settings, in the address and on the clipboard */
+  shareBtn.addEventListener('click', async () => {
+    flushEdits();
+    if (!timeline) return;
+    let hash;
+    try {
+      hash = await encodeSong(timeline, settings);
+    } catch (e) {
+      console.warn(e);
+      api.toast('The song link could not be made.');
+      return;
+    }
+    linkText = `The link is ${hash.length.toLocaleString('en')} characters long.`;
+    if (hash.length > MAX_HASH) {
+      linkText = '';
+      renderShare();
+      api.toast(TOO_LONG);
+      return;
+    }
+    renderShare();
+    // the address holds the song, so it can be copied by hand too
+    history.replaceState(null, '', `#${hash}`);
+    try {
+      await navigator.clipboard.writeText(location.href);
+      api.toast('Song link copied. It opens this song, ready to play.');
+    } catch {
+      api.toast('Copy the address bar to share this song.');
+    }
+  });
+
+  /** a song link opened: the song in the panel, ready to play; a bad link leaves the page as it was */
+  const openLink = async (hash) => {
+    if (!canShare()) {
+      api.toast(UNSUPPORTED);
+      return;
+    }
+    let song;
+    try {
+      song = await decodeSong(hash);
+    } catch (e) {
+      api.toast(e.message);
+      return;
+    }
+    if (!(await usePoints())) return;
+    settings = settingsOf(song.settings, points);
+    useSong(song.timeline, song.audio ? {file: null, info: null} : null, true);
+    togglePanel(true);
+  };
+
   // ---------- recording the show as a video ----------
 
   const recType = pickType();
@@ -1115,6 +1186,8 @@ export const initShow = (api) => {
   return {
     playing: () => mode === 'playing',
     recording: () => !!rec,
+    hasSong: () => !!timeline,
+    openLink,
     afterFrame,
     /** the page interrupts the show; while recording only a hidden tab counts, and it saves what was recorded */
     interrupt: (reason) => {

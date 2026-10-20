@@ -1340,6 +1340,8 @@ const syncUI = () => {
 let hashTimer = 0;
 const writeHash = () => {
   clearTimeout(hashTimer);
+  // while a song is loaded the address is the song's, never the view's
+  if (cantus?.hasSong()) return;
   const d = state.dest;
   const f = cur();
   const parts = [`f=${f.key}`, `x=${d.cx}`, `y=${d.cy}`, `s=${d.span}`];
@@ -1398,7 +1400,8 @@ const loadHash = () => {
 
 // ---------- songs ----------
 
-const openSong = async () => {
+/** the song mode, loaded the first time it is needed; true when it is there */
+const loadCantus = async () => {
   if (!cantus) {
     cantusLoading ||= import('./cantus/show.js?v=29').then((m) =>
       m.initShow({
@@ -1444,11 +1447,24 @@ const openSong = async () => {
       console.warn(e);
       cantusLoading = null;
       toast('Songs could not load. Try reloading the page.');
-      return;
+      return false;
     }
   }
-  cantus.togglePanel();
+  return true;
 };
+
+const openSong = async () => {
+  if (await loadCantus()) cantus.togglePanel();
+};
+
+/** a song link (#cantus=...): the song opens in the panel, ready to play; it never starts sound by itself */
+const isSongLink = (hash) => hash.startsWith('#cantus=');
+const openSongLink = async (hash) => {
+  if (await loadCantus()) cantus.openLink(hash);
+};
+window.addEventListener('hashchange', () => {
+  if (isSongLink(location.hash)) openSongLink(location.hash);
+});
 
 // ---------- start ----------
 
@@ -1461,7 +1477,9 @@ resize();
 buildGallery();
 renderParam();
 syncUI();
-const fromLink = loadHash();
+// a song link is routed before the view's link is read, which would refuse it for its length
+const songLink = isSongLink(location.hash);
+const fromLink = songLink ? false : loadHash();
 booted = true;
 let welcomed = false;
 try {
@@ -1470,7 +1488,8 @@ try {
   // no storage: show the welcome
 }
 // a shared link goes straight to its point; first-time visitors get one screen of explanation
-$('#welcome').hidden = welcomed || fromLink;
+$('#welcome').hidden = welcomed || fromLink || songLink;
+if (songLink) openSongLink(location.hash);
 requestAnimationFrame(tick);
 // draw the gallery's small pictures while the visitor is still reading
 setTimeout(makeThumbs, 1500);
