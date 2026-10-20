@@ -32,7 +32,7 @@ On a computer you can also use the keyboard: `G` gallery, `X` random, `J` Julia 
 ## Play a song
 
 Mundana can also play a song. Press the music note button next to the round button (bottom left on a phone) and
-choose a MIDI file. Fractals play every part of it: each note is a point whose orbit loops at that pitch, and you see
+choose a MIDI file or a recording (MP3, WAV, M4A, OGG or FLAC, whatever your browser can open). Fractals play every part of it: each note is a point whose orbit loops at that pitch, and you see
 every orbit as it sounds, in blue. The drums are sounds rather than notes: a kick is an orbit that flies away (a click,
 drawn in red), a snare or a hat is a point whose orbit never repeats, brighter for a hat. Play, pause, seek and stop
 from the bar at the bottom. Pressing the picture, switching fractal or hiding the tab pauses the song; press play to
@@ -57,7 +57,16 @@ to 5. When a chord needs more voices than are free, it keeps its lowest note, th
 seventh; a note that loses its voice to a newer one comes back when a voice is free again. The panel says how many
 notes were left out.
 
-Limits: MIDI files up to 4 MB, songs up to 10 minutes and 20,000 notes, at most 6 voices (4 by default), at most 16
+A recording is turned into notes in your browser, in the background, with a bar that shows how far it has got and a
+Cancel button: the melody, the bass, the chords, the drums, the beat and the sections. It takes a few seconds (a 4
+minute song took about 5 seconds on a recent laptop). The notes are approximate: good for a solo instrument or a clear
+voice, decent for the melody and bass of a band, rough for the exact chords of a dense mix. Fix them in the piano
+roll, where notes heard in a recording are drawn fainter the less sure they are and the header says "approximate".
+Turn on Original audio to hear the recording under the fractals, 30 percent loud by default. The recording never
+leaves your device. Recordings can be up to 50 MB; a song longer than 10 minutes plays its first 10 minutes if you
+agree.
+
+Limits: MIDI files up to 4 MB, recordings up to 50 MB, songs up to 10 minutes and 20,000 notes, at most 6 voices (4 by default), at most 16
 sections. Notes shorter than 40 ms are joined to the next or dropped, and notes too high or too low move by whole
 octaves; the panel says how many. If the picture cannot keep up, it draws with less detail for a while; the sound
 is never touched.
@@ -88,7 +97,7 @@ than the highest MIDI note, and notes the song had to move by octaves to play ar
 - **Smooth morphing** between fractals: every frame of the change is a real fractal in between
 - **Julia sets**, three colour styles, and a pitch control
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
-- **Play a song** from a MIDI file, melody, chords, bass and drums, on up to six voices at once, with a camera that
+- **Play a song** from a MIDI file or a recording, melody, chords, bass and drums, on up to six voices at once, with a camera that
   follows the music and a new fractal for each section if you like, and **fix its notes** in a piano roll
 - **Works on phones:** one finger plays, two fingers move and zoom
 
@@ -112,7 +121,9 @@ The tests need Node 22 or newer and nothing else:
 node --test tests/*.test.mjs
 ```
 
-The small MIDI files the tests read are written by `node tools/make-midi-fixtures.mjs`.
+The small MIDI files the tests read are written by `node tools/make-midi-fixtures.mjs`. The test songs the audio
+analysis is scored on are written as code in `tools/render-test-songs.mjs`; `node tools/render-test-songs.mjs <folder>`
+saves them as WAV files to listen to.
 
 ## How it works
 
@@ -131,6 +142,9 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 | [`src/cantus/timeline.js`](src/cantus/timeline.js) | The song as notes in time, with its checks and limits, and the sections it falls into |
 | [`src/cantus/mapper.js`](src/cantus/mapper.js) | Gives every note a point and a speed that play it, and a voice to play it on; picks the drum sounds; plans which fractal is on screen, the morphs and the camera |
 | [`src/cantus/scheduler.js`](src/cantus/scheduler.js) | Sends each note to the audio thread just ahead of time, on the audio clock: play, pause, seek, loop |
+| [`src/cantus/analyse.js`](src/cantus/analyse.js) | Hears a recording: splits the notes from the drums, finds the beat, follows the melody and the bass, names the chords, finds the drums and the sections |
+| [`src/cantus/fft.js`](src/cantus/fft.js) | The Fourier transform the analysis uses |
+| [`src/cantus/analyse-worker.js`](src/cantus/analyse-worker.js) | Runs the analysis in the background, so the page stays responsive |
 | [`src/cantus/editor.js`](src/cantus/editor.js) | The piano roll: draws the notes, and every change to them, with undo |
 | [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song, which keeps time with the sound |
 

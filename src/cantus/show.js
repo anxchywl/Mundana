@@ -4,13 +4,13 @@
 // sounding note is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls
 // into it through a few small hooks; everything it needs from the page comes in `api`.
 
-import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=27';
-import {validateTimeline, cleanTitle} from './timeline.js?v=27';
-import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=27';
-import {Transport} from './scheduler.js?v=27';
-import {loadPoints} from './points.js?v=27';
-import {paramOf} from '../fractals.js?v=27';
-import {initEditor} from './editor.js?v=27';
+import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=28';
+import {validateTimeline, cleanTitle} from './timeline.js?v=28';
+import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=28';
+import {Transport} from './scheduler.js?v=28';
+import {loadPoints} from './points.js?v=28';
+import {paramOf} from '../fractals.js?v=28';
+import {initEditor} from './editor.js?v=28';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -318,7 +318,7 @@ export const initShow = (api) => {
     }
     let worker;
     try {
-      worker = new Worker(new URL('./analyse-worker.js?v=27', import.meta.url), {type: 'module'});
+      worker = new Worker(new URL('./analyse-worker.js?v=28', import.meta.url), {type: 'module'});
     } catch {
       endWork();
       api.toast('This browser cannot hear songs in the background. Try another browser.');
