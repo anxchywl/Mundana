@@ -71,6 +71,18 @@ sections. Notes shorter than 40 ms are joined to the next or dropped, and notes 
 octaves; the panel says how many. If the picture cannot keep up, it draws with less detail for a while; the sound
 is never touched.
 
+### Record a video
+
+Press Record video in the song panel to save the show as a video file, picture and sound together. After a count of
+one second it plays the song from the start (or the range you chose in the piano roll) to the end, in real time, and
+then saves `<song title> - Mundana.mp4` (or `.webm`). The panel shows the size to expect before you start: about 5
+Mbps, so about 19 MB for 30 seconds and 154 MB for 4 minutes. While it records, the bar shows a red dot, the time and
+the size so far; Stop saves what has been recorded. Pause is off, pressing the picture does nothing, and hiding the
+tab stops the recording and saves it. The video is made in your browser and never leaves your device.
+
+Formats: Chrome records MP4 (H.264 video, AAC sound), measured on Chrome 155 for macOS. Other browsers were not tested
+yet; where a browser cannot record video, the button says so.
+
 To see how smoothly a song plays on your device, add `#debug=1` to the address. A line at the top then shows the
 frames a second, the slowest frame times, the picture's detail, and how far the picture is from the sound, in
 milliseconds.
@@ -98,7 +110,8 @@ than the highest MIDI note, and notes the song had to move by octaves to play ar
 - **Julia sets**, three colour styles, and a pitch control
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
 - **Play a song** from a MIDI file or a recording, melody, chords, bass and drums, on up to six voices at once, with a camera that
-  follows the music and a new fractal for each section if you like, and **fix its notes** in a piano roll
+  follows the music and a new fractal for each section if you like, **fix its notes** in a piano roll, and
+  **record it as a video**
 - **Works on phones:** one finger plays, two fingers move and zoom
 
 ## Run it yourself
@@ -145,6 +158,7 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 | [`src/cantus/analyse.js`](src/cantus/analyse.js) | Hears a recording: splits the notes from the drums, finds the beat, follows the melody and the bass, names the chords, finds the drums and the sections |
 | [`src/cantus/fft.js`](src/cantus/fft.js) | The Fourier transform the analysis uses |
 | [`src/cantus/analyse-worker.js`](src/cantus/analyse-worker.js) | Runs the analysis in the background, so the page stays responsive |
+| [`src/cantus/record.js`](src/cantus/record.js) | Records the show as a video: the picture and the orbits drawn together each frame, with the sound |
 | [`src/cantus/editor.js`](src/cantus/editor.js) | The piano roll: draws the notes, and every change to them, with undo |
 | [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song, which keeps time with the sound |
 

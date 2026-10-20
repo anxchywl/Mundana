@@ -2,7 +2,7 @@
 // copied; this worker answers with {type: 'progress', stage, fraction} as it goes, then {type: 'done', timeline, info}
 // or {type: 'error', message}. To cancel, the page ends the worker.
 
-import {analyseAudio} from './analyse.js?v=28';
+import {analyseAudio} from './analyse.js?v=29';
 
 self.onmessage = (e) => {
   const {samples, sr} = e.data || {};

@@ -7,8 +7,8 @@
 // a song may use. Timed events wait in a ring per voice. Everything is allocated here, so the audio callback never
 // allocates, and a voice that is not sounding is skipped before any work per sample.
 
-import {Voice, Master} from './voice.js?v=28';
-import {fractals, paramOf} from './fractals.js?v=28';
+import {Voice, Master} from './voice.js?v=29';
+import {fractals, paramOf} from './fractals.js?v=29';
 
 const MAX_VOICES = 6;
 const DEFAULT_VOICES = 4;
