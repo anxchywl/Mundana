@@ -206,6 +206,15 @@ export const initShow = (api) => {
     timeline = t;
     audioSong = heard;
     live.heard = heard;
+    // simple mode: a dense band mix plays its chords, bass and drums, its melody muted until the user turns it on
+    const dense = !fromLink && !!heard?.info?.dense;
+    if (dense && !settings.parts.melody.mute) {
+      settings.parts.melody.mute = true;
+      simpleMuted = true;
+    } else if (!dense && simpleMuted) {
+      settings.parts.melody.mute = false;
+      simpleMuted = false;
+    }
     cue = 0;
     replan();
     editor.load(timeline);
@@ -216,6 +225,8 @@ export const initShow = (api) => {
   // the work under way: {worker, cancelled}; the song from a recording: {file, info}
   let work = null;
   let audioSong = null;
+  // the melody was muted for simple mode, not by the user
+  let simpleMuted = false;
   const pick = $('#c-pick');
   const workBox = $('#c-work');
   const stageOut = $('#c-stage');
@@ -535,7 +546,9 @@ export const initShow = (api) => {
     if (audioSong) {
       notes.push('Notes heard in a recording are approximate: good for a solo instrument or a clear voice, decent for the melody and bass of a band, rough for the chords of a dense mix.');
       if (audioSong.info?.drumsOnly) notes.push('Almost nothing in it has a pitch, so it plays as drums.');
-      else if (audioSong.info?.noisy) notes.push('This recording is noisy, so the notes are rough.');
+      else if (audioSong.info?.dense) {
+        notes.push(settings.parts.melody.mute ? 'A dense band mix plays simple: chords, bass and drums. Its melody is rough, so it starts muted.' : 'In a dense band mix the melody heard is rough.');
+      } else if (audioSong.info?.noisy) notes.push('This recording is noisy, so the notes are rough.');
     }
     for (const part of ['chords', 'bass', 'drums']) {
       const n = plan?.left[part];
@@ -648,7 +661,12 @@ export const initShow = (api) => {
       mute.textContent = 'Mute';
       mute.setAttribute('aria-pressed', String(s.mute));
       mute.setAttribute('aria-label', `Mute the ${part}`);
-      mute.addEventListener('click', () => change(() => (s.mute = !s.mute)));
+      mute.addEventListener('click', () =>
+        change(() => {
+          s.mute = !s.mute;
+          if (part === 'melody') simpleMuted = false;
+        }),
+      );
       li.appendChild(mute);
       list.appendChild(li);
     }
