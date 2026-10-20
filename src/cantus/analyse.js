@@ -980,15 +980,17 @@ export const sectionsOf = (features, minBeats) => {
     }
     return aa && bb ? ab / Math.sqrt(aa * bb) : 0;
   };
+  // near either end the kernel is cut to the same width on both sides: a kernel missing its past half sums only the
+  // positive future block, and those edge values once set the threshold above every real change (a 189 s rock song,
+  // novelty mean 3.6 and spread 8.9 from its ends, its section changes at about 5: one section)
   const nov = new Float64Array(n);
   for (let i = 0; i < n; i++) {
+    const h = Math.min(half, i, n - i);
     let s = 0;
-    for (let a = -half; a < half; a++) {
+    for (let a = -h; a < h; a++) {
       const ia = i + a;
-      if (ia < 0 || ia >= n) continue;
-      for (let b = -half; b < half; b++) {
+      for (let b = -h; b < h; b++) {
         const ib = i + b;
-        if (ib < 0 || ib >= n) continue;
         const sign = a < 0 === b < 0 ? 1 : -1;
         const g = Math.exp(-((a + 0.5) ** 2 + (b + 0.5) ** 2) / (2 * SECTIONS.sigma ** 2));
         s += sign * g * sim(ia, ib);
