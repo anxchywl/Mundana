@@ -15,7 +15,7 @@
 // prefers points inside the framing of its moment, so a fast passage stays in one framing instead of chasing every
 // note. cameraAt and morphAt read the picture back at any song time, so pause, seek and loop are right at once.
 
-import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=29';
+import {fractals, RATE, PITCH_DOWN, PITCH_UP} from '../fractals.js?v=30';
 
 export const RATE_MIN = RATE * 2 ** (-PITCH_DOWN / 12);
 export const RATE_MAX = RATE * 2 ** (PITCH_UP / 12);

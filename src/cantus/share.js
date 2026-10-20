@@ -3,8 +3,8 @@
 // decompressed as a stream that stops past 512 KB, and the JSON is checked by hand, every key known, every number in
 // bounds, before validateTimeline sees it. Anything wrong rejects the whole link. Plain JavaScript; Node runs it too.
 
-import {validateTimeline, cleanTitle, PARTS, DRUMS, MAX_SECONDS, MAX_NOTES, MAX_BEATS, MAX_SECTIONS} from './timeline.js?v=29';
-import {fractals} from '../fractals.js?v=29';
+import {validateTimeline, cleanTitle, PARTS, DRUMS, MAX_SECONDS, MAX_NOTES, MAX_BEATS, MAX_SECTIONS} from './timeline.js?v=30';
+import {fractals} from '../fractals.js?v=30';
 
 export const PREFIX = 'cantus=1.';
 export const MAX_HASH = 32768;

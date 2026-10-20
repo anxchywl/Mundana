@@ -71,6 +71,15 @@ sections. Notes shorter than 40 ms are joined to the next or dropped, and notes 
 octaves; the panel says how many. If the picture cannot keep up, it draws with less detail for a while; the sound
 is never touched.
 
+### Share a song
+
+Press Copy song link in the song panel. The link holds the song's notes, its parts, its settings and your edits, so
+whoever opens it gets the same show, ready to play: it opens the song panel and waits for Play. Song links carry
+notes, never sound, not even for a song made from a recording; the panel says so before you copy. The panel shows how
+long the link is: a short MIDI song takes a few hundred characters, a 4 minute song heard in a recording about 14,000.
+Songs whose link would be over 32,768 characters cannot be shared this way. Opening a link checks every part of it
+first; a damaged one is turned away whole, with a message, and the page opens as normal.
+
 ### Record a video
 
 Press Record video in the song panel to save the show as a video file, picture and sound together. After a count of
@@ -111,7 +120,7 @@ than the highest MIDI note, and notes the song had to move by octaves to play ar
 - **Save the sound** as a WAV file, **save the picture**, or **copy a link** that opens the exact same view and point
 - **Play a song** from a MIDI file or a recording, melody, chords, bass and drums, on up to six voices at once, with a camera that
   follows the music and a new fractal for each section if you like, **fix its notes** in a piano roll, and
-  **record it as a video**
+  **record it as a video** or **share it as a link**
 - **Works on phones:** one finger plays, two fingers move and zoom
 
 ## Run it yourself
@@ -158,6 +167,7 @@ Everything happens in your browser, in plain JavaScript with no libraries.
 | [`src/cantus/analyse.js`](src/cantus/analyse.js) | Hears a recording: splits the notes from the drums, finds the beat, follows the melody and the bass, names the chords, finds the drums and the sections |
 | [`src/cantus/fft.js`](src/cantus/fft.js) | The Fourier transform the analysis uses |
 | [`src/cantus/analyse-worker.js`](src/cantus/analyse-worker.js) | Runs the analysis in the background, so the page stays responsive |
+| [`src/cantus/share.js`](src/cantus/share.js) | Song links: packs the notes and settings into the address, and checks every part of a link before using it |
 | [`src/cantus/record.js`](src/cantus/record.js) | Records the show as a video: the picture and the orbits drawn together each frame, with the sound |
 | [`src/cantus/editor.js`](src/cantus/editor.js) | The piano roll: draws the notes, and every change to them, with undo |
 | [`src/cantus/show.js`](src/cantus/show.js) | The song panel, the play bar, and the picture during a song, which keeps time with the sound |
@@ -169,7 +179,8 @@ to rebuild the point library; the tests say when it is out of date.
 ## Privacy and safety
 
 - **No accounts, no tracking, no server.** Nothing you do leaves your device, apart from loading the fonts.
-- **Shared links are checked** before use, and the page only runs its own scripts.
+- **Shared links are checked** before use, and the page only runs its own scripts. Song links carry notes, never
+  sound.
 - **It recovers by itself** if your graphics card resets, and heavy fractals are capped so slow devices keep up.
 
 Found a way to break it? Please [open an issue](https://github.com/anxchywl/Mundana/issues).
