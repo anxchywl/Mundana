@@ -148,8 +148,22 @@
     <!-- songs: choose a MIDI file, see its parts, play it -->
     <section id="cantus" class="card pop cantus" aria-label="Play a song">
       <h2>Play a song</h2>
-      <p class="lede">Choose a MIDI file and fractals play it: the melody, the chords, the bass and the drums. Every note is a point whose orbit loops at that pitch. The file stays on your device.</p>
-      <label class="c-file"><input id="c-file" type="file" accept=".mid,.midi,audio/midi" />Choose a MIDI file</label>
+      <p class="lede">Choose a MIDI file or a recording and fractals play it: the melody, the chords, the bass and the drums. Every note is a point whose orbit loops at that pitch. The file stays on your device.</p>
+      <label id="c-pick" class="c-file"><input id="c-file" type="file" accept=".mid,.midi,audio/midi,audio/*,.mp3,.wav,.m4a,.ogg,.oga,.opus,.flac" />Choose a MIDI or audio file</label>
+      <div id="c-work" class="c-work" role="status" hidden>
+        <p id="c-stage" class="c-stage">Reading the file</p>
+        <div class="c-work-row">
+          <div class="c-bar"><span id="c-fill" class="c-fill"></span></div>
+          <button id="c-cancel" class="c-mute">Cancel</button>
+        </div>
+      </div>
+      <div id="c-ask" class="c-ask" hidden>
+        <p>This song is longer than 10 minutes. Use the first 10 minutes?</p>
+        <div class="c-actions">
+          <button id="c-use" class="c-edit">Use</button>
+          <button id="c-no" class="c-mute">Cancel</button>
+        </div>
+      </div>
       <div id="c-song" class="c-song" hidden>
         <p id="c-title" class="c-title"></p>
         <p id="c-meta" class="c-meta"></p>
@@ -166,6 +180,12 @@
         <div id="c-every-row" class="c-row" hidden><label for="c-every">Bars for each fractal</label><select id="c-every"></select></div>
         <ol id="c-set" class="c-set" aria-label="Set list" hidden></ol>
         <ul id="c-parts" class="c-parts" aria-label="Parts"></ul>
+        <div id="c-orig-row" class="c-row c-orig" hidden>
+          <span>Original audio</span>
+          <input id="c-level" type="range" min="0" max="100" step="1" value="30" aria-label="Level of the original audio" />
+          <button id="c-orig" class="c-mute" aria-pressed="false" aria-label="Play the original audio underneath">Off</button>
+        </div>
+        <p id="c-orig-note" class="c-notes" hidden>Original audio plays at normal speed only.</p>
         <p id="c-notes" class="c-notes"></p>
         <p id="c-prep" class="c-prep" hidden>Preparing the picture</p>
         <div class="c-actions">

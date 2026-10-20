@@ -6,7 +6,8 @@
 // (--long writes one more song of that many seconds, for timing a long analysis in the browser).
 
 import {writeFileSync, mkdirSync, readFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {join, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {parseMidi} from '../src/cantus/midi.js';
 
 export const SR = 22050;
@@ -260,7 +261,7 @@ export const wav = (x) => {
   return new Uint8Array(d.buffer);
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const dir = process.argv[2];
   if (!dir) {
     console.log('usage: node tools/render-test-songs.mjs <folder> [--long seconds]');

@@ -204,3 +204,19 @@ test('snap and search helpers', () => {
   assert.equal(firstFrom(ns, 2), 3);
   assert.equal(firstFrom(ns, 9), 4);
 });
+
+test('a pitch heard in a recording moves with its note', () => {
+  const t = validateTimeline({
+    notes: [{start: 0, duration: 0.5, midi: 61, midiMeasured: 60.8, velocity: 0.5, part: 'melody', confidence: 0.6, source: 'audio'}],
+    tempo: {bpm: 120, beats: [0, 0.5]},
+    duration: 1,
+    title: 'Heard',
+  });
+  const id = t.notes[0].id;
+  const up = applyEdit(t, {type: 'transpose', ids: [id], dmidi: 12});
+  assert.equal(up.notes[0].midi, 73);
+  assert.ok(Math.abs(up.notes[0].midiMeasured - 72.8) < 1e-9);
+  const moved = applyEdit(t, {type: 'move', ids: [id], dt: 0.2, dmidi: -1});
+  assert.ok(Math.abs(moved.notes[0].midiMeasured - 59.8) < 1e-9);
+  assert.equal(moved.notes[0].source, 'audio');
+});

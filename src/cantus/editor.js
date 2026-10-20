@@ -73,6 +73,8 @@ const changed = (n, e) => {
     m.start = Math.max(0, n.start + e.dt);
     if (n.part === 'drums') m.drum = DRUMS[Math.max(0, Math.min(DRUMS.length - 1, rowOf(n) + e.drow))];
     else m.midi = Math.max(0, Math.min(127, n.midi + e.dmidi));
+    // a pitch heard in a recording moves with its note
+    if (n.midiMeasured !== undefined && n.part !== 'drums') m.midiMeasured = Math.max(0, Math.min(127, n.midiMeasured + (m.midi - n.midi)));
   } else if (e.type === 'stretch') {
     // a note stops at 40 ms, and never runs past 10 minutes
     m.duration = Math.min(MAX_SECONDS, Math.max(MIN_NOTE, Math.min(Math.max(n.duration, MAX_SECONDS - n.start), n.duration + e.dd)));
@@ -601,8 +603,18 @@ export const initEditor = (api) => {
     for (const b of panel.querySelectorAll('[data-needs="selection"]')) b.disabled = none;
     q('#e-undo').disabled = !history?.past.length;
     q('#e-redo').disabled = !history?.future.length;
-    q('#e-count').textContent = selected.size ? `${selected.size.toLocaleString('en')} selected` : '';
+    q('#e-count').textContent = selected.size ? `${selected.size.toLocaleString('en')} selected${heardAt()}` : '';
     redraw();
+  };
+
+  /** one note heard in a recording selected: how far from its key it was heard */
+  const heardAt = () => {
+    if (selected.size !== 1) return '';
+    const [id] = selected;
+    const n = tl().notes.find((x) => x.id === id);
+    if (n?.midiMeasured === undefined) return '';
+    const cents = Math.round((n.midiMeasured - n.midi) * 100);
+    return cents === 0 ? ', heard in tune' : `, heard ${Math.abs(cents)} cents ${cents > 0 ? 'sharp' : 'flat'}`;
   };
 
   const commit = (t) => {

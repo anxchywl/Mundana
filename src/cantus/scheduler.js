@@ -25,14 +25,16 @@ const firstFrom = (events, time) => {
 export class Transport {
   /**
    * ctx: the AudioContext (currentTime, getOutputTimestamp, outputLatency, baseLatency are read). send(m): posts a
-   * message to the worklet. plan: a ShowPlan. onEnd: called when the song has played to its end. timer and wallNow
-   * are there for the tests.
+   * message to the worklet. plan: a ShowPlan. onEnd: called when the song has played to its end. onAnchor(anchor):
+   * called with each new anchor {ctx, song} (play, seek, a loop wrap), for sound that must start with the song. timer
+   * and wallNow are there for the tests.
    */
-  constructor({ctx, send, plan, onEnd = () => {}, timer = {set: (f, ms) => setInterval(f, ms), clear: (id) => clearInterval(id)}, wallNow = () => performance.now()}) {
+  constructor({ctx, send, plan, onEnd = () => {}, onAnchor = () => {}, timer = {set: (f, ms) => setInterval(f, ms), clear: (id) => clearInterval(id)}, wallNow = () => performance.now()}) {
     this.ctx = ctx;
     this.post = send;
     this.plan = plan;
     this.onEnd = onEnd;
+    this.onAnchor = onAnchor;
     this.timer = timer;
     this.wallNow = wallNow;
     this.load(plan);
@@ -170,6 +172,7 @@ export class Transport {
     t = Math.min(t, this.duration);
     const at = this.ctx.currentTime + START_DELAY;
     this.anchors = [{ctx: at, song: t}];
+    this.onAnchor(this.anchors[0]);
     this.cursor = firstFrom(this.events, t);
     this.sentTo = t;
     this.pressHeld(t, at);
@@ -204,6 +207,7 @@ export class Transport {
       const at = this.ctxOf(anchor, this.loop.b);
       for (let v = 0; v < this.voices; v++) this.send({type: 'release', voice: v, at});
       this.anchors.push({ctx: at, song: this.loop.a});
+      this.onAnchor(this.anchors[this.anchors.length - 1]);
       this.cursor = firstFrom(ev, this.loop.a);
       this.sentTo = this.loop.a;
       this.pressHeld(this.loop.a, at);

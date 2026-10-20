@@ -1040,6 +1040,49 @@ body.show-on .cantus {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* an audio file being heard: what is happening, a bar, and Cancel; or the question about a long song */
+.c-file[hidden],
+.c-work[hidden],
+.c-ask[hidden],
+.c-orig[hidden] {
+  display: none;
+}
+.c-work,
+.c-ask {
+  margin-top: 14px;
+}
+.c-stage,
+.c-ask p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--paper-2);
+}
+.c-work-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.c-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.c-fill {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+}
+/* the recording under the notes: its level and a switch */
+.c-orig {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
 /* ---------- the piano roll: the lower part of the screen on a computer, a full sheet on a phone ---------- */
 
 .editor {

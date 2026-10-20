@@ -5,6 +5,7 @@
 // into it through a few small hooks; everything it needs from the page comes in `api`.
 
 import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=27';
+import {validateTimeline, cleanTitle} from './timeline.js?v=27';
 import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=27';
 import {Transport} from './scheduler.js?v=27';
 import {loadPoints} from './points.js?v=27';
@@ -21,8 +22,8 @@ const PARTS = [
 ];
 
 /** the running show, for the browser checks and for later phases: `t` is the song time of the last frame, `page` the
- * page's state, `drift` every measured drift in ms */
-export const live = {plan: null, transport: null, audio: null, drift: [], budget: null, t: 0, page: null, editor: null};
+ * page's state, `drift` every measured drift in ms, `heard` the report of the last audio file heard ({file, info}) */
+export const live = {plan: null, transport: null, audio: null, drift: [], budget: null, t: 0, page: null, editor: null, heard: null};
 
 /**
  * The frame budget of a show: frame times over a sliding 2 s window. When their 95th percentile is over the target
@@ -82,6 +83,24 @@ const MIN_VOICES = 4; // the panel offers 4 to 6 voices
 const LEFT = {bass: ['bass note', 'bass notes'], chords: ['chord note', 'chord notes'], drums: ['drum hit', 'drum hits']};
 const MAX_DRAWN = 6;
 const EDIT_WAIT = 300; // ms without a new edit before the song is planned again
+const AUDIO_BYTES = 50 * 1024 * 1024;
+const AUDIO_SECONDS = 600;
+const AUDIO_RATE = 22050; // the analysis hears the song in mono at this rate
+const SILENT = 0.001; // -60 dBFS
+const STAGE_NAMES = {
+  spectrum: 'Splitting the notes from the drums',
+  beats: 'Finding the beat',
+  melody: 'Following the melody',
+  bass: 'Following the bass',
+  chords: 'Hearing the chords',
+  drums: 'Finding the drums',
+  sections: 'Finding the sections',
+  done: 'Writing the notes',
+};
+const UNREADABLE = 'This file could not be read. It may be damaged, protected, or a type this browser cannot open.';
+
+/** a MIDI file by its name or type; anything else is heard as audio unless its first bytes say MIDI */
+const namedMidi = (f) => /\.midi?$/i.test(f.name) || /^audio\/(x-)?midi$/.test(f.type);
 
 const option = (value, label) => {
   const o = document.createElement('option');
@@ -132,7 +151,21 @@ export const initShow = (api) => {
   file.addEventListener('change', async () => {
     const f = file.files?.[0];
     file.value = '';
-    if (!f) return;
+    if (!f || work) return;
+    let midi = namedMidi(f);
+    if (!midi) {
+      // checked before anything is read
+      if (f.size > AUDIO_BYTES) {
+        api.toast('This file is over 50 MB.');
+        return;
+      }
+      const head = new Uint8Array(await f.slice(0, 4).arrayBuffer());
+      midi = String.fromCharCode(...head) === 'MThd';
+    }
+    if (!midi) {
+      loadAudio(f);
+      return;
+    }
     if (f.size > MAX_BYTES) {
       api.toast('MIDI files can be up to 4 MB.');
       return;
@@ -145,17 +178,288 @@ export const initShow = (api) => {
       fail(e, 'This is not a MIDI file.');
       return;
     }
+    if (await usePoints()) useSong(t, null);
+  });
+
+  const usePoints = async () => {
     try {
       points = await loadPoints();
+      return true;
     } catch (e) {
       fail(e, 'The notes could not load. Try again.');
-      return;
+      return false;
     }
+  };
+
+  /** a new song in the panel, from a MIDI file or from a recording (`heard` is then the analysis's report) */
+  const useSong = (t, heard) => {
     stopShow();
+    dropOriginal();
     timeline = t;
+    audioSong = heard;
+    live.heard = heard;
     cue = 0;
     replan();
     editor.load(timeline);
+  };
+
+  // ---------- a song from an audio file ----------
+
+  // the work under way: {worker, cancelled}; the song from a recording: {file, info}
+  let work = null;
+  let audioSong = null;
+  const pick = $('#c-pick');
+  const workBox = $('#c-work');
+  const stageOut = $('#c-stage');
+  const fill = $('#c-fill');
+
+  const showWork = (text, fraction = 0) => {
+    pick.hidden = true;
+    workBox.hidden = false;
+    if (stageOut.textContent !== text) stageOut.textContent = text;
+    fill.style.transform = `scaleX(${Math.max(0, Math.min(1, fraction))})`;
+  };
+  const endWork = () => {
+    work?.worker?.terminate();
+    work = null;
+    workBox.hidden = true;
+    $('#c-ask').hidden = true;
+    pick.hidden = false;
+  };
+  $('#c-cancel').addEventListener('click', () => {
+    if (work) work.cancelled = true;
+    endWork();
+  });
+
+  /** the question about a song over 10 minutes: true to use its first 10 minutes */
+  const askLong = () =>
+    new Promise((resolve) => {
+      workBox.hidden = true;
+      const box = $('#c-ask');
+      box.hidden = false;
+      const answer = (yes) => {
+        box.hidden = true;
+        $('#c-use').removeEventListener('click', use);
+        $('#c-no').removeEventListener('click', no);
+        resolve(yes);
+      };
+      const use = () => answer(true);
+      const no = () => answer(false);
+      $('#c-use').addEventListener('click', use);
+      $('#c-no').addEventListener('click', no);
+      $('#c-use').focus();
+    });
+
+  /**
+   * An audio file: decoded by the browser at 22,050 Hz, mixed down to one channel through an offline context (the
+   * first 10 minutes at most), checked for silence, and handed to the analysis worker, which sends back the notes.
+   * Nothing leaves the device; the file's bytes and the decoded sound are let go before the worker starts.
+   */
+  const loadAudio = async (f) => {
+    const job = {worker: null, cancelled: false};
+    work = job;
+    showWork('Reading the file');
+    let samples;
+    try {
+      let bytes = await f.arrayBuffer();
+      if (job.cancelled) return;
+      let decoded;
+      try {
+        // an offline context at 22,050 Hz decodes straight to that rate: a 10 minute stereo song then takes 106 MB,
+        // not 230 MB at 48 kHz
+        decoded = await new OfflineAudioContext(1, 1, AUDIO_RATE).decodeAudioData(bytes);
+      } catch {
+        decoded = null;
+      }
+      bytes = null;
+      if (job.cancelled) return;
+      if (!decoded || !decoded.length) {
+        endWork();
+        api.toast(UNREADABLE);
+        return;
+      }
+      let length = decoded.length;
+      if (decoded.duration > AUDIO_SECONDS) {
+        if (!(await askLong()) || job.cancelled) {
+          endWork();
+          return;
+        }
+        workBox.hidden = false;
+        length = Math.min(length, AUDIO_SECONDS * decoded.sampleRate);
+      }
+      showWork('Reading the file', 0.01);
+      // one channel: the offline context mixes the channels down
+      const oc = new OfflineAudioContext(1, Math.round((length * AUDIO_RATE) / decoded.sampleRate), AUDIO_RATE);
+      const src = oc.createBufferSource();
+      src.buffer = decoded;
+      src.connect(oc.destination);
+      src.start();
+      decoded = null;
+      let mono = await oc.startRendering();
+      samples = mono.getChannelData(0);
+      mono = null;
+    } catch (e) {
+      if (job.cancelled) return;
+      endWork();
+      fail(e instanceof RangeError ? new Error('Not enough memory for this song. Try a shorter one.') : e, UNREADABLE);
+      return;
+    }
+    if (job.cancelled) return;
+    let sum = 0;
+    for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+    if (Math.sqrt(sum / samples.length) < SILENT) {
+      endWork();
+      api.toast('This file is silent.');
+      return;
+    }
+    if (!(await usePoints()) || job.cancelled) {
+      endWork();
+      return;
+    }
+    let worker;
+    try {
+      worker = new Worker(new URL('./analyse-worker.js?v=27', import.meta.url), {type: 'module'});
+    } catch {
+      endWork();
+      api.toast('This browser cannot hear songs in the background. Try another browser.');
+      return;
+    }
+    job.worker = worker;
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (job.cancelled || !m) return;
+      if (m.type === 'progress') showWork(STAGE_NAMES[m.stage] || 'Listening', m.fraction);
+      else if (m.type === 'error') {
+        endWork();
+        api.toast(m.message);
+      } else if (m.type === 'done') {
+        endWork();
+        let t;
+        try {
+          t = validateTimeline({...m.timeline, title: cleanTitle(f.name.replace(/\.[^.]*$/, '')) || 'Untitled'});
+        } catch (err) {
+          fail(err, 'This song cannot be played.');
+          return;
+        }
+        if (!t.notes.length) {
+          api.toast('No notes were heard in this file.');
+          return;
+        }
+        useSong(t, {file: f, info: m.info});
+        if (m.info?.drumsOnly) api.toast('Almost nothing in this file has a pitch, so it plays as drums.');
+        else if (m.info?.noisy) api.toast('This recording is noisy, so the notes are rough.');
+      }
+    };
+    worker.onerror = () => {
+      if (job.cancelled) return;
+      endWork();
+      api.toast('This song could not be read.');
+    };
+    showWork(STAGE_NAMES.spectrum, 0.02);
+    // transferred, not copied: from here the page holds no copy of the sound
+    worker.postMessage({samples, sr: AUDIO_RATE}, [samples.buffer]);
+    samples = null;
+  };
+
+  // ---------- the recording under the notes ----------
+
+  // off by default. The recording is decoded again, at the sound's own rate, the first time it is turned on; a source
+  // plays it from each anchor of the transport (play, seek, a loop wrap), through the page's volume
+  const original = {on: false, level: 0.3, buffer: null, source: null, gain: null};
+  const origBtn = $('#c-orig');
+  const levelIn = $('#c-level');
+
+  const syncOriginal = () => {
+    $('#c-orig-row').hidden = !audioSong;
+    origBtn.textContent = original.on ? 'On' : 'Off';
+    origBtn.setAttribute('aria-pressed', String(original.on));
+    // only at normal speed: at any other the recording would drift from the notes
+    $('#c-orig-note').hidden = !(audioSong && original.on && transport && transport.speed !== 1);
+  };
+
+  const stopOriginal = (at = 0) => {
+    const s = original.source;
+    original.source = null;
+    if (!s) return;
+    s.onended = () => s.disconnect();
+    try {
+      s.stop(at);
+    } catch {
+      // never started
+      s.disconnect();
+    }
+  };
+
+  const dropOriginal = () => {
+    stopOriginal();
+    original.buffer = null;
+    original.on = false;
+    syncOriginal();
+  };
+
+  /** the recording from song time anchor.song, at context time anchor.ctx; the one playing before stops there */
+  const startOriginal = (anchor) => {
+    const a = api.audio();
+    if (!original.on || !original.buffer || !original.gain || !a?.ctx || !transport) return;
+    if (transport.speed !== 1) {
+      stopOriginal();
+      syncOriginal();
+      return;
+    }
+    const at = Math.max(a.ctx.currentTime, anchor.ctx);
+    stopOriginal(at);
+    const src = a.ctx.createBufferSource();
+    src.buffer = original.buffer;
+    src.connect(original.gain);
+    src.start(at, Math.max(0, anchor.song + (at - anchor.ctx)));
+    original.source = src;
+  };
+
+  origBtn.addEventListener('click', async () => {
+    if (original.on) {
+      original.on = false;
+      stopOriginal();
+      syncOriginal();
+      return;
+    }
+    const song = audioSong;
+    if (!song?.file) return;
+    original.on = true;
+    syncOriginal();
+    await api.startAudio();
+    const a = api.audio();
+    if (!a?.ctx || !a.gain) {
+      original.on = false;
+      syncOriginal();
+      return;
+    }
+    if (!original.gain || original.gain.context !== a.ctx) {
+      original.gain = a.ctx.createGain();
+      original.gain.gain.value = original.level;
+      original.gain.connect(a.gain);
+    }
+    if (!original.buffer) {
+      try {
+        const buffer = await a.ctx.decodeAudioData(await song.file.arrayBuffer());
+        if (audioSong !== song) return;
+        original.buffer = buffer;
+      } catch {
+        original.on = false;
+        syncOriginal();
+        api.toast('The original audio could not be read.');
+        return;
+      }
+    }
+    if (!original.on || mode !== 'playing' || !transport) return;
+    // a song playing now: the recording joins it a moment from now, and follows any loop wrap already sent
+    const at = a.ctx.currentTime + 0.05;
+    startOriginal({ctx: at, song: transport.songAt(at)});
+    for (const anchor of transport.anchors) if (anchor.ctx > at) startOriginal(anchor);
+  });
+
+  levelIn.addEventListener('input', () => {
+    original.level = Number(levelIn.value) / 100;
+    if (original.gain) original.gain.gain.setTargetAtTime(original.level, original.gain.context.currentTime, 0.02);
   });
 
   const replan = (announce = true) => {
@@ -182,7 +486,10 @@ export const initShow = (api) => {
     $('#c-song').hidden = !timeline;
     if (!timeline) return;
     $('#c-title').textContent = timeline.title;
-    $('#c-meta').textContent = `${clock(timeline.duration)}, ${count(timeline.notes.length, 'note', 'notes')} found`;
+    $('#c-meta').textContent = audioSong
+      ? `${clock(timeline.duration)}, ${count(timeline.notes.length, 'note', 'notes')} heard, about ${Math.round(timeline.tempo.bpm)} beats a minute`
+      : `${clock(timeline.duration)}, ${count(timeline.notes.length, 'note', 'notes')} found`;
+    syncOriginal();
     const list = $('#c-tracks');
     list.replaceChildren();
     timeline.tracks.forEach((tr, i) => {
@@ -216,6 +523,11 @@ export const initShow = (api) => {
     });
     renderParts();
     const notes = [];
+    if (audioSong) {
+      notes.push('Notes heard in a recording are approximate: good for a solo instrument or a clear voice, decent for the melody and bass of a band, rough for the chords of a dense mix.');
+      if (audioSong.info?.drumsOnly) notes.push('Almost nothing in it has a pitch, so it plays as drums.');
+      else if (audioSong.info?.noisy) notes.push('This recording is noisy, so the notes are rough.');
+    }
     for (const part of ['chords', 'bass', 'drums']) {
       const n = plan?.left[part];
       if (n) notes.push(`${count(n, ...LEFT[part])} left out: more than ${plan.voices} voices.`);
@@ -428,7 +740,7 @@ export const initShow = (api) => {
     if (!a?.node) return false;
     live.audio = a;
     if (!transport || transport.ctx !== a.ctx) {
-      transport = new Transport({ctx: a.ctx, send: api.send, plan, onEnd: () => stopShow()});
+      transport = new Transport({ctx: a.ctx, send: api.send, plan, onEnd: () => stopShow(), onAnchor: (anchor) => startOriginal(anchor)});
       live.transport = transport;
     }
     api.send({type: 'voices', n: plan.voices});
@@ -461,6 +773,7 @@ export const initShow = (api) => {
   const pause = () => {
     if (mode !== 'playing') return;
     transport.pause();
+    stopOriginal();
     mode = 'paused';
     endPicture();
     restoreManual();
@@ -470,6 +783,7 @@ export const initShow = (api) => {
   function stopShow() {
     if (mode === 'off') return;
     transport?.stop();
+    stopOriginal();
     mode = 'off';
     endPicture();
     restoreManual();
