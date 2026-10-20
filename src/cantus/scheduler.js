@@ -117,11 +117,12 @@ export class Transport {
     return ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
   }
 
+  /** the song time at a context time; before the first anchor (just after play or a seek) it is the moment just
+   * before the anchor's, so nothing that starts there is drawn early */
   songAt(ctxTime) {
     const a = this.anchors;
     let k = a.length - 1;
     while (k > 0 && a[k].ctx > ctxTime) k--;
-    if (ctxTime < a[k].ctx) return a[k].song;
     return a[k].song + (ctxTime - a[k].ctx) * this.speed;
   }
 
@@ -132,11 +133,15 @@ export class Transport {
   /** the song time you hear now */
   now() {
     if (this.state !== 'playing') return this.pos;
-    return Math.max(0, Math.min(this.duration, this.songAt(this.audibleCtx())));
+    // before the first anchor is heard, the song is where it was started from
+    const c = this.audibleCtx();
+    const t = c < this.anchors[0].ctx ? this.anchors[0].song : this.songAt(c);
+    return Math.max(0, Math.min(this.duration, t));
   }
 
   /** the song time the speakers play at wall time `ms` (performance.now() time), now or a little ahead: the picture
-   * asks for the moment its frame will be on screen */
+   * asks for the moment its frame will be on screen. Just after play or a seek it can be a little before the song
+   * time it started from (below 0 at the start) */
   songAtWall(ms) {
     if (this.state !== 'playing') return this.pos;
     const ctx = this.ctx;
@@ -145,7 +150,7 @@ export class Transport {
       ts && ts.performanceTime > 0
         ? ts.contextTime + (ms - ts.performanceTime) / 1000
         : ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0) + (ms - this.wallNow()) / 1000;
-    return Math.max(0, Math.min(this.duration, this.songAt(c)));
+    return Math.min(this.duration, this.songAt(c));
   }
 
   send(m) {

@@ -168,3 +168,22 @@ test('a new plan while paused or stopped is taken at once', () => {
   tr.setPlan(planOf([[1, 1]], 5));
   assert.equal(tr.presses[0].time, 1);
 });
+
+test('before the first anchor the picture is just before the start, the song time stays there; anchors are announced', () => {
+  const anchors = [];
+  const ctx = {currentTime: 1, outputLatency: 0};
+  let wall = 1000;
+  const tr = new Transport({ctx, send: () => {}, plan: planOf([[0, 0.5], [5, 0.5]], 10), onAnchor: (a) => anchors.push({...a}), timer: {set: () => 1, clear: () => {}}, wallNow: () => wall});
+  tr.play();
+  assert.deepEqual(anchors, [{ctx: 1 + START_DELAY, song: 0}]);
+  // the picture at this moment: before the song starts, so a note at 0 is not drawn yet
+  assert.ok(Math.abs(tr.songAtWall(wall) + START_DELAY) < 1e-9);
+  assert.equal(tr.now(), 0);
+  tr.seek(5);
+  assert.deepEqual(anchors[1], {ctx: 1 + START_DELAY, song: 5});
+  assert.ok(tr.songAtWall(wall) < 5 && tr.songAtWall(wall) > 4.9);
+  assert.equal(tr.now(), 5);
+  ctx.currentTime += 0.2;
+  wall += 200;
+  assert.ok(Math.abs(tr.songAtWall(wall) - 5.15) < 1e-9);
+});
