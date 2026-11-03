@@ -1241,7 +1241,8 @@ const actions = {
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act], [data-colour]');
   if (!b) {
-    if (!e.target.closest('.pop')) closeSettings();
+    // the path, not the target: a button in a panel may have been rebuilt by its own click
+    if (!e.composedPath().some((el) => el.classList?.contains('pop'))) closeSettings();
     return;
   }
   if (!b.closest('.pop') && !['settings', 'about', 'song'].includes(b.dataset.act)) closeSettings();
