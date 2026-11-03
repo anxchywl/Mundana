@@ -827,7 +827,7 @@ const drawOverlay = (now) => {
     ctx2d.stroke();
     dot(hx, hy, 5, escapes ? ink.red : ink.blue);
     ring(hx, hy, 9, ink.paper, 0.8);
-    ctx2d.font = '500 12px Jost, system-ui, sans-serif';
+    ctx2d.font = '500 12px "Alegreya Sans", system-ui, sans-serif';
     ctx2d.fillStyle = ink.paper;
     ctx2d.fillText(String(shown), hx + 13, hy - 9);
   }

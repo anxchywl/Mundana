@@ -360,7 +360,7 @@ export const initEditor = (api) => {
     const bottom = plotBottom();
     const dTop = drumTop();
     const t1 = view.t0 + view.secs;
-    ctx.font = '500 11px Jost, system-ui, sans-serif';
+    ctx.font = '500 11px "Alegreya Sans", system-ui, sans-serif';
     ctx.textBaseline = 'middle';
 
     // rows: black keys darker, a line under every C
@@ -488,13 +488,13 @@ export const initEditor = (api) => {
     }
     ctx.restore();
     ctx.fillStyle = ink.paper3;
-    ctx.font = '500 10px Jost, system-ui, sans-serif';
+    ctx.font = '500 10px "Alegreya Sans", system-ui, sans-serif';
     DRUMS.forEach((d, r) => ctx.fillText(DRUM_NAMES[d], 3, dTop + r * geo.drumRow + geo.drumRow / 2));
 
     // the ruler: bar numbers, and seconds below them
     ctx.fillStyle = ink.surface2;
     ctx.fillRect(left, 0, W - left, top - 2);
-    ctx.font = '500 11px Jost, system-ui, sans-serif';
+    ctx.font = '500 11px "Alegreya Sans", system-ui, sans-serif';
     ctx.fillStyle = ink.paper2;
     let lastX = -Infinity;
     for (let i = firstTime(bars, view.t0); i < bars.length && bars[i] <= t1; i++) {

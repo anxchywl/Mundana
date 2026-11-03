@@ -122,7 +122,7 @@ export class Recorder {
     g.drawImage(this.fractal, 0, 0, w, h);
     g.drawImage(this.overlay, 0, 0, w, h);
     const px = Math.max(12, Math.round(Math.min(w, h) / 45));
-    g.font = `500 ${px}px Jost, system-ui, sans-serif`;
+    g.font = `500 ${px}px "Alegreya Sans", system-ui, sans-serif`;
     g.textBaseline = 'alphabetic';
     g.fillStyle = this.paper;
     const caption = this.title ? `“${this.title}” from Mundana` : 'Mundana';
