@@ -11,8 +11,9 @@ import {Transport} from './scheduler.js?v=33';
 import {loadPoints} from './points.js?v=33';
 import {paramOf} from '../fractals.js?v=33';
 import {initEditor} from './editor.js?v=33';
+import {enhanceSelects} from './choose.js?v=33';
 import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=33';
-import {Recorder, support, pickType, estimate, sizeText, fileName, VIDEO_BITS, COUNT_IN_MS} from './record.js?v=33';
+import {Recorder, support, pickType, sizeText, fileName, COUNT_IN_MS} from './record.js?v=33';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -82,6 +83,9 @@ const clock = (s) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 const count = (n, one, many) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
+const SPEAKER =
+  '<svg class="i-sound" viewBox="0 0 20 20"><path d="M3.5 7.5v5h3l4 3.5V4l-4 3.5z" /><path d="M13.5 7.5a3.5 3.5 0 0 1 0 5M15.5 5a7 7 0 0 1 0 10" /></svg>' +
+  '<svg class="i-muted" viewBox="0 0 20 20"><path d="M3.5 7.5v5h3l4 3.5V4l-4 3.5z" /><path d="m13.5 8 4 4M17.5 8l-4 4" /></svg>';
 const MIN_VOICES = 4; // the panel offers 4 to 6 voices
 const LEFT = {bass: ['bass note', 'bass notes'], chords: ['chord note', 'chord notes'], drums: ['drum hit', 'drum hits']};
 const MAX_DRAWN = 6;
@@ -137,7 +141,6 @@ export const initShow = (api) => {
   const panelOpen = () => panel.classList.contains('open');
   const togglePanel = (open = !panelOpen()) => {
     if (open) api.closeSettings();
-    // the estimate follows a range chosen in the editor
     if (open && timeline) renderRecord();
     panel.classList.toggle('open', open);
     document.body.classList.toggle('song-panel', open);
@@ -145,6 +148,28 @@ export const initShow = (api) => {
     api.dimForSheets();
   };
   const closePanel = () => panelOpen() && togglePanel(false);
+  // a click on the dimmed page behind the pop-up, or Escape, closes it
+  $('#c-backdrop').addEventListener('click', closePanel);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closePanel();
+  });
+
+  /** a row of choices of which one is on: real radio buttons, so the arrow keys move along them */
+  const radios = (box, name, items, onPick) => {
+    for (const [value, label] of items) {
+      const wrap = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = name;
+      input.value = String(value);
+      input.addEventListener('change', () => onPick(value));
+      const text = document.createElement('span');
+      text.textContent = label;
+      wrap.append(input, text);
+      box.appendChild(wrap);
+    }
+  };
+  const setRadio = (box, value) => box.querySelectorAll('input').forEach((i) => (i.checked = i.value === String(value)));
 
   // ---------- the song in the panel ----------
 
@@ -199,7 +224,6 @@ export const initShow = (api) => {
   /** a new song in the panel, from a MIDI file or from a recording (`heard` is then the analysis's report) */
   const useSong = (t, heard, fromLink = false) => {
     stopShow();
-    linkText = '';
     // the address held another song's link: it no longer says what is loaded
     if (!fromLink && location.hash.startsWith('#cantus=')) history.replaceState(null, '', location.pathname + location.search);
     dropOriginal();
@@ -391,7 +415,7 @@ export const initShow = (api) => {
   const syncOriginal = () => {
     // a song opened from a link has its notes but not its recording
     $('#c-orig-row').hidden = !audioSong?.file;
-    origBtn.textContent = original.on ? 'On' : 'Off';
+    origBtn.classList.toggle('is-off', !original.on);
     origBtn.setAttribute('aria-pressed', String(original.on));
     // only at normal speed: at any other the recording would drift from the notes
     $('#c-orig-note').hidden = !(audioSong && original.on && transport && transport.speed !== 1);
@@ -504,6 +528,10 @@ export const initShow = (api) => {
 
   const renderSong = () => {
     $('#c-song').hidden = !timeline;
+    panel.classList.toggle('has-song', Boolean(timeline));
+    // the file button: under the words before there is a song, among the song's buttons after
+    (timeline ? $('.c-foot .c-actions') : $('.c-head')).appendChild(pick);
+    pick.setAttribute('aria-label', timeline ? 'Choose another file' : 'Choose a MIDI or audio file');
     if (!timeline) return;
     $('#c-title').textContent = timeline.title;
     $('#c-meta').textContent = audioSong
@@ -542,9 +570,9 @@ export const initShow = (api) => {
       list.appendChild(li);
     });
     renderParts();
+    enhanceSelects(panel);
     const notes = [];
     if (audioSong) {
-      notes.push('Notes heard in a recording are approximate: good for a solo instrument or a clear voice, decent for the melody and bass of a band, rough for the chords of a dense mix.');
       if (audioSong.info?.drumsOnly) notes.push('Almost nothing in it has a pitch, so it plays as drums.');
       else if (audioSong.info?.dense) {
         notes.push(settings.parts.melody.mute ? 'A dense band mix plays simple: chords, bass and drums. Its melody is rough, so it starts muted.' : 'In a dense band mix the melody heard is rough.');
@@ -610,11 +638,11 @@ export const initShow = (api) => {
   // preferred period and a mute switch; rebuilt with the song
   const renderParts = () => {
     const voices = $('#c-voices');
-    if (!voices.options.length) {
-      for (let n = MIN_VOICES; n <= MAX_VOICES; n++) voices.appendChild(option(n, String(n)));
-      voices.addEventListener('change', () => change(() => (settings.voices = Number(voices.value))));
+    if (!voices.children.length) {
+      const counts = Array.from({length: MAX_VOICES - MIN_VOICES + 1}, (_, i) => [MIN_VOICES + i, String(MIN_VOICES + i)]);
+      radios(voices, 'c-voices', counts, (n) => change(() => (settings.voices = n)));
     }
-    voices.value = String(settings.voices);
+    setRadio(voices, settings.voices);
     const keys = pitchedFractals(points);
     renderLayout(keys);
     const list = $('#c-parts');
@@ -657,8 +685,9 @@ export const initShow = (api) => {
         li.append(fr, per);
       }
       const mute = document.createElement('button');
-      mute.className = 'c-mute';
-      mute.textContent = 'Mute';
+      mute.className = `c-mute c-speaker${s.mute ? ' is-off' : ''}`;
+      mute.innerHTML = SPEAKER;
+      mute.title = s.mute ? `Turn the ${part} back on` : `Mute the ${part}`;
       mute.setAttribute('aria-pressed', String(s.mute));
       mute.setAttribute('aria-label', `Mute the ${part}`);
       mute.addEventListener('click', () =>
@@ -672,15 +701,23 @@ export const initShow = (api) => {
     }
   };
 
-  const layoutSel = $('#c-layout');
+  const layoutBox = $('#c-layout');
   const everySel = $('#c-every');
   for (let n = EVERY.min; n <= EVERY.max; n++) everySel.appendChild(option(n, String(n)));
-  layoutSel.addEventListener('change', () => change(() => (settings.layout = layoutSel.value)));
+  radios(layoutBox, 'c-layout', [['one', 'One fractal'], ['sections', 'By section'], ['bars', 'Every few bars']], (value) =>
+    change(() => (settings.layout = value)),
+  );
   everySel.addEventListener('change', () => change(() => (settings.every = Number(everySel.value))));
 
   /** the fractals: one, or a set list with a row per section, or a row per fractal in turn every few bars */
   const renderLayout = (keys) => {
-    layoutSel.value = settings.layout;
+    setRadio(layoutBox, settings.layout);
+    $('#c-layout-note').textContent = {
+      one: 'Each part plays the fractal you choose for it.',
+      sections: `${count(timeline.sections.length, 'section', 'sections')} found. Each one gets its own fractal.`,
+      bars: '',
+    }[settings.layout];
+    $('#c-layout-note').hidden = !$('#c-layout-note').textContent;
     everySel.value = String(settings.every);
     $('#c-every-row').hidden = settings.layout !== 'bars';
     const list = $('#c-set');
@@ -889,17 +926,10 @@ export const initShow = (api) => {
   // ---------- song links ----------
 
   const shareBtn = $('#c-share');
-  const linkNote = $('#c-link-note');
-  let linkText = '';
   /** the button is there where this browser can make links; songs from audio say what the link holds */
   const renderShare = () => {
     shareBtn.hidden = !canShare();
     shareBtn.disabled = !timeline;
-    const notes = [];
-    if (audioSong) notes.push('The link holds the notes of this song, not its sound.');
-    if (linkText) notes.push(linkText);
-    linkNote.textContent = notes.join(' ');
-    linkNote.hidden = !notes.length || !canShare();
   };
 
   /** Copy song link: the notes, parts and settings, in the address and on the clipboard */
@@ -914,14 +944,10 @@ export const initShow = (api) => {
       api.toast('The song link could not be made.');
       return;
     }
-    linkText = `The link is ${hash.length.toLocaleString('en')} characters long.`;
     if (hash.length > MAX_HASH) {
-      linkText = '';
-      renderShare();
       api.toast(TOO_LONG);
       return;
     }
-    renderShare();
     // the address holds the song, so it can be copied by hand too
     history.replaceState(null, '', `#${hash}`);
     try {
@@ -961,13 +987,8 @@ export const initShow = (api) => {
     const btn = $('#c-record');
     const note = $('#c-rec-note');
     btn.disabled = !recType || !plan?.presses.length || !!rec;
-    if (!recType) note.textContent = 'Video recording is not supported in this browser. Try Chrome or Safari.';
-    else {
-      const range = editor.range();
-      const seconds = range ? range.b - range.a : timeline?.duration || 0;
-      note.textContent = `Recording takes the song in real time: about ${sizeText(estimate(seconds))} for ${clock(seconds)}, at ${VIDEO_BITS / 1e6} Mbps.`;
-    }
-    note.hidden = !timeline;
+    note.textContent = 'Video recording is not supported in this browser. Try Chrome or Safari.';
+    note.hidden = !timeline || Boolean(recType);
     const box = $('#c-rec-support');
     box.hidden = !api.debugOn;
     if (api.debugOn) {

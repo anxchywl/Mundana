@@ -759,27 +759,63 @@ body.sheet-open #stage {
 
 /* ---------- songs: the panel and the transport bar ---------- */
 
-/* the panel rises from the middle of the dock, above the transport bar when a song is on */
+/* a pop-up in the middle of the screen, with the page dimmed behind it; during a song, in the middle of the space
+   above the transport bar, which stays in reach */
 .cantus {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--gap) + 92px);
-  width: 380px;
+  top: 50%;
+  bottom: auto;
+  width: 440px;
   padding: 20px 22px 20px;
-  transform: translate(-50%, 10px) scale(0.96);
-  transform-origin: 50% 100%;
-  max-height: calc(100vh - 92px - 2 * var(--gap));
+  transform: translate(-50%, calc(-50% + 10px)) scale(0.96);
+  transform-origin: 50% 50%;
+  max-height: calc(100vh - 2 * var(--gap));
 }
 .cantus.open {
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -50%);
 }
 body.show-on .cantus {
-  bottom: calc(var(--gap) + 160px);
+  top: calc(50vh - 80px);
   max-height: calc(100vh - 160px - 2 * var(--gap));
+}
+/* the head: an invitation before there is a song, its button in the middle; its title and another file after */
+.c-head {
+  position: relative;
+}
+.cantus:not(.has-song) .c-file {
+  display: block;
+  width: fit-content;
+  margin-inline: auto;
+}
+.cantus:not(.has-song) .c-file[hidden] {
+  display: none;
+}
+.c-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: rgba(11, 11, 12, 0.72);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s;
+}
+body.song-panel .c-backdrop {
+  opacity: 1;
+  visibility: visible;
+}
+body.song-panel .transport {
+  z-index: 6;
+}
+.c-head p {
+  margin: 0;
 }
 .cantus h2 {
   margin: 0;
-  font-weight: 600;
+  text-align: center;
+  font-weight: 700;
   font-size: 22px;
 }
 .cantus .lede {
@@ -787,6 +823,19 @@ body.show-on .cantus {
   font-size: 15px;
   line-height: 1.5;
   color: var(--paper-2);
+}
+.c-pick-icon,
+.c-title,
+.c-meta,
+.has-song .c-pick-first,
+.has-song h2,
+.has-song .lede {
+  display: none;
+}
+.has-song .c-title,
+.has-song .c-meta {
+  display: block;
+  text-align: center;
 }
 .c-file {
   position: relative;
@@ -815,9 +864,7 @@ body.show-on .cantus {
   overflow: hidden;
 }
 .c-song {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--surface-2);
+  margin-top: 14px;
 }
 .c-song[hidden] {
   display: none;
@@ -826,9 +873,14 @@ body.show-on .cantus {
   margin: 0;
 }
 .c-title {
-  font-weight: 500;
-  font-size: 18px;
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.2;
   overflow-wrap: anywhere;
+}
+.c-head-text {
+  min-width: 0;
+  flex: 1 1 200px;
 }
 .c-meta {
   margin-top: 2px !important;
@@ -836,12 +888,35 @@ body.show-on .cantus {
   color: var(--paper-3);
   font-variant-numeric: tabular-nums;
 }
+
+/* three groups, each on its own slightly lighter ground: what is in the file, how each part sounds, what is on screen */
+.c-grid {
+  display: grid;
+  gap: 10px;
+}
+.c-col {
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.c-col h3 {
+  margin: 0;
+  font-weight: 700;
+  font-size: 16px;
+}
+.c-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .c-tracks {
   list-style: none;
   margin: 12px 0 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 .c-tracks li {
   display: flex;
@@ -864,38 +939,150 @@ body.show-on .cantus {
   font-size: 13px;
   color: var(--paper-3);
 }
-.c-tracks select {
-  flex: none;
-  height: 32px;
-  padding: 0 12px;
+
+/* every menu of the panel: a soft pill with one small chevron */
+.c-choose {
+  min-width: 0;
+  display: block;
+  text-align: left;
+  height: 34px;
+  padding: 0 26px 0 12px;
   border: 0;
-  border-radius: 999px;
-  background: var(--surface-2);
+  border-radius: 10px;
+  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%23f7f1e9' stroke-opacity='.6' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 10px center / 10px 6px;
   color: var(--paper);
   font: inherit;
   font-size: 14px;
   cursor: pointer;
+  transition: background-color 0.15s;
 }
-.c-tracks select:focus-visible {
+.c-choose[aria-expanded='true']:focus-visible {
+  outline: none; /* the list lies over it */
+}
+.c-choose span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.c-tracks .c-choose {
+  flex: none;
+  width: 92px;
+}
+.c-choose:hover,
+.c-choose[aria-expanded='true'],
+.c-mute:hover {
+  background-color: var(--surface-3);
+}
+.c-choose:focus-visible,
+.c-mute:focus-visible,
+.c-seg label:has(:focus-visible) {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
-.c-tracks option {
-  background: #19191c;
+/* the open list: above the panel, and it never reaches the window's edge */
+.c-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
 }
-/* the voices and, per part, its fractal, preferred period and a mute switch */
+.c-menu-layer[hidden] {
+  display: none;
+}
+.c-menu {
+  position: fixed;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) transparent;
+  border-radius: 12px;
+  background: #27272b;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+  animation: c-menu-in 0.12s ease-out;
+}
+@keyframes c-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+.c-menu li {
+  padding: 7px 28px 7px 10px;
+  border-radius: 8px;
+  color: var(--paper-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.c-menu li.active {
+  background-color: var(--surface-3);
+  color: var(--paper);
+}
+.c-menu li[aria-selected='true'] {
+  color: var(--paper);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Cpath d='m1 5 3.5 3.5L11 1.5' fill='none' stroke='%235ab4dc' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 11px 9px;
+}
+
+/* one choice of a few, all in sight */
+.c-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.c-seg-wide {
+  display: flex;
+  margin-top: 12px;
+}
+.c-seg label {
+  position: relative;
+  flex: 1 1 auto;
+  padding: 6px 11px;
+  border-radius: 8px;
+  color: var(--paper-2);
+  font-size: 14px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.c-seg label:hover {
+  color: var(--paper);
+}
+.c-seg label:has(:checked) {
+  background: var(--paper);
+  color: var(--ink);
+}
+.c-seg input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
 .c-voices {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--surface-2);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 15px;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--paper-2);
+}
+.c-layout-note {
+  text-align: center;
+  margin-top: 10px !important;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--paper-3);
 }
 /* the fractals: one, or a set list */
 .c-row {
-  margin-top: 8px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -909,7 +1096,7 @@ body.show-on .cantus {
 }
 .c-set {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   display: grid;
   gap: 6px;
@@ -928,25 +1115,39 @@ body.show-on .cantus {
   font-size: 13.5px;
   color: var(--blue);
 }
-.c-parts {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
+/* per part: its fractal, the loop length it prefers, and a mute switch, lined up as a table */
+.c-parts-head,
 .c-parts li {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  grid-template-columns: 54px minmax(0, 1fr) 96px 34px;
   align-items: center;
   gap: 6px;
 }
+.c-parts-head {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--paper-3);
+}
+.c-parts-head span {
+  text-align: center;
+}
+.c-parts {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.c-parts .c-choose {
+  width: 100%;
+}
 .c-part {
-  font-size: 14px;
+  font-size: 15px;
 }
 .c-where {
   grid-column: 2 / 4;
-  font-size: 13px;
+  padding-left: 12px;
+  font-size: 14px;
   color: var(--paper-3);
 }
 /* with a set list a pitched part plays the fractal on screen: one column, beside its period */
@@ -958,53 +1159,58 @@ body.show-on .cantus {
   text-overflow: ellipsis;
 }
 .c-parts li.muted .c-part,
-.c-parts li.muted select,
+.c-parts li.muted .c-choose,
 .c-parts li.muted .c-where {
   opacity: 0.45;
 }
-.c-voices select,
-.c-row select,
-.c-set select,
-.c-parts select {
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--paper);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-.c-voices select:focus-visible,
-.c-row select:focus-visible,
-.c-set select:focus-visible,
-.c-parts select:focus-visible,
-.c-mute:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
-}
-.c-voices option,
-.c-row option,
-.c-set option,
-.c-parts option {
-  background: #19191c;
-}
 .c-mute {
-  height: 32px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 10px;
   border: 0;
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--paper-2);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
+  transition: background-color 0.15s;
 }
-.c-mute[aria-pressed='true'] {
+.c-mute[aria-pressed='true'],
+.c-mute[aria-pressed='true']:hover {
   background: var(--paper);
   color: var(--ink);
+}
+/* sound on or off: a speaker, dim and crossed out when off */
+.c-speaker,
+.c-speaker[aria-pressed='true'],
+.c-speaker[aria-pressed='true']:hover {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--paper);
+}
+.c-speaker:hover,
+.c-speaker[aria-pressed='true']:hover {
+  background: var(--surface-3);
+}
+.c-speaker svg {
+  width: 18px;
+  height: 18px;
+}
+.c-speaker .i-muted,
+.c-speaker.is-off .i-sound {
+  display: none;
+}
+.c-speaker.is-off .i-muted {
+  display: block;
+}
+.c-speaker.is-off,
+.c-speaker.is-off[aria-pressed='true'] {
+  background: transparent;
+  color: var(--paper-3);
 }
 .c-notes[hidden] {
   display: none;
@@ -1023,13 +1229,90 @@ body.show-on .cantus {
   cursor: default;
 }
 
-/* under the song: Play, and the piano roll */
+/* under the song: Play, then the rest as icons, each named when you point at it */
 .c-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 14px;
+}
+.c-foot .c-actions {
+  justify-content: center;
+}
+.c-foot .c-notes {
+  text-align: center;
+}
+.c-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.c-play svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.c-tool,
+.c-foot .c-file {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+.c-tool[hidden],
+.c-foot .c-file[hidden] {
+  display: none;
+}
+.c-tool svg,
+.c-foot .c-pick-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+.c-foot .c-pick-first {
+  display: none;
+}
+.c-tool:hover,
+.c-foot .c-file:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.c-tool:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.c-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.c-tool::after,
+.c-foot .c-file::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 7px);
+  transform: translateX(-50%);
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: #27272b;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  color: var(--paper);
+  font-size: 13px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.c-tool:hover::after,
+.c-tool:focus-visible::after,
+.c-foot .c-file:hover::after,
+.c-foot .c-file:focus-within::after {
+  opacity: 1;
 }
 .c-edit:disabled {
   opacity: 0.4;
@@ -1743,11 +2026,16 @@ body.show-on .hint {
   .settings.open {
     transform: none;
   }
+  /* a phone dims the page its own way (sheet-open) */
+  .c-backdrop {
+    display: none;
+  }
   .cantus,
   body.show-on .cantus {
     position: fixed;
     left: 0;
     right: 0;
+    top: auto;
     bottom: 0;
     width: 100%;
     border-radius: 22px 22px 0 0;
@@ -1758,6 +2046,22 @@ body.show-on .hint {
   .cantus.open,
   body.show-on .cantus.open {
     transform: none;
+  }
+  /* a narrow table: the fractal's name gets every pixel the rest can spare */
+  .c-col {
+    padding: 12px 12px 14px;
+  }
+  .c-parts-head,
+  .c-parts li {
+    grid-template-columns: 50px minmax(0, 1fr) 84px 34px;
+    gap: 5px;
+  }
+  .c-parts .c-choose {
+    padding: 0 20px 0 9px;
+    background-position: right 7px center;
+  }
+  .c-where {
+    padding-left: 9px;
   }
   /* the piano roll fills the screen, with its toolbar on two rows if it needs them */
   .editor {
@@ -1939,15 +2243,73 @@ body.show-on .hint {
     bottom: calc(var(--gap) + 96px);
     max-width: min(420px, calc(100vw - 2 * var(--gap) - 70px));
   }
-  /* during a song the readout sits above the transport bar; it and the fractal's card step aside while the song
-     panel is open, which can reach the top of the screen here */
+  /* during a song the readout sits above the transport bar */
   body.show-on .readout {
     bottom: calc(var(--gap) + 156px);
   }
-  body.song-panel .readout,
-  body.song-panel .info {
-    opacity: 0;
-    pointer-events: none;
+}
+
+/* a computer: with a song the panel opens out wide, the groups side by side and Play always in sight */
+@media (min-width: 761px) {
+  .cantus.has-song {
+    display: flex;
+    flex-direction: column;
+    width: min(1040px, calc(100vw - 180px));
+    padding: 20px 24px;
+    overflow: hidden;
+  }
+  .has-song .c-song {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .has-song .c-grid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+  }
+  .c-foot .c-notes {
+    margin: 0 0 8px !important;
+  }
+  .c-foot {
+    flex: none;
+    padding-top: 12px;
+  }
+  .c-foot .c-actions {
+    margin-top: 8px;
+  }
+  .c-foot .start {
+    padding: 11px 30px;
+    font-size: 15px;
+  }
+}
+/* the window is wide enough for parts above, tracks and fractals below */
+@media (min-width: 900px) {
+  .c-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .c-col-parts {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}
+/* wide enough for all three side by side: each group scrolls on its own, so a long track list moves nothing else */
+@media (min-width: 1180px) {
+  .has-song .c-grid {
+    grid-template-columns: minmax(190px, 0.72fr) minmax(370px, 1.35fr) minmax(280px, 1fr);
+    overflow: hidden;
+  }
+  .c-col-parts {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .has-song .c-col {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
   }
 }
 

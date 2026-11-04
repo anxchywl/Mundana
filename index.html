@@ -146,10 +146,17 @@
     </div>
 
     <!-- songs: choose a MIDI file, see its parts, play it -->
+    <div id="c-backdrop" class="c-backdrop"></div>
     <section id="cantus" class="card pop cantus" aria-label="Play a song">
-      <h2>Play a song</h2>
-      <p class="lede">Choose a MIDI file or a recording and fractals play it: the melody, the chords, the bass and the drums. Every note is a point whose orbit loops at that pitch. The file stays on your device.</p>
-      <label id="c-pick" class="c-file"><input id="c-file" type="file" accept=".mid,.midi,audio/midi,audio/*,.mp3,.wav,.m4a,.ogg,.oga,.opus,.flac" />Choose a MIDI or audio file</label>
+      <header class="c-head">
+        <div class="c-head-text">
+          <h2>Play a song</h2>
+          <p class="lede">Choose a MIDI file or a recording and fractals play it: the melody, the chords, the bass and the drums. Every note is a point whose orbit loops at that pitch. The file stays on your device.</p>
+          <p id="c-title" class="c-title"></p>
+          <p id="c-meta" class="c-meta"></p>
+        </div>
+        <label id="c-pick" class="c-file"><input id="c-file" type="file" accept=".mid,.midi,audio/midi,audio/*,.mp3,.wav,.m4a,.ogg,.oga,.opus,.flac" /><span class="c-pick-first">Choose a MIDI or audio file</span><svg class="c-pick-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h3.2l1.8 2h6A1.5 1.5 0 0 1 17 8.5v6a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z" /></svg></label>
+      </header>
       <div id="c-work" class="c-work" role="status" hidden>
         <p id="c-stage" class="c-stage">Reading the file</p>
         <div class="c-work-row">
@@ -165,38 +172,48 @@
         </div>
       </div>
       <div id="c-song" class="c-song" hidden>
-        <p id="c-title" class="c-title"></p>
-        <p id="c-meta" class="c-meta"></p>
-        <ul id="c-tracks" class="c-tracks"></ul>
-        <div class="c-voices"><label for="c-voices">Voices</label><select id="c-voices"></select></div>
-        <div class="c-row">
-          <label for="c-layout">Fractals</label>
-          <select id="c-layout">
-            <option value="one">One fractal</option>
-            <option value="sections">A fractal per section</option>
-            <option value="bars">Change every few bars</option>
-          </select>
+        <div class="c-grid">
+          <section class="c-col c-col-tracks" aria-label="Tracks">
+            <h3>Tracks</h3>
+            <ul id="c-tracks" class="c-tracks"></ul>
+          </section>
+          <section class="c-col c-col-parts" aria-label="Parts">
+            <div class="c-col-head">
+              <h3>Parts</h3>
+              <div class="c-voices" title="How many notes can sound at once">
+                <span id="c-voices-label">Voices</span>
+                <div id="c-voices" class="c-seg" role="radiogroup" aria-labelledby="c-voices-label"></div>
+              </div>
+            </div>
+            <div class="c-parts-head" aria-hidden="true"><span></span><span>Fractal</span><span>Period</span></div>
+            <ul id="c-parts" class="c-parts"></ul>
+            <div id="c-orig-row" class="c-row c-orig" hidden>
+              <span>Original audio</span>
+              <input id="c-level" type="range" min="0" max="100" step="1" value="30" aria-label="Level of the original audio" />
+              <button id="c-orig" class="c-mute c-speaker is-off" aria-pressed="false" aria-label="Play the original audio underneath" title="Play the original audio underneath"><svg class="i-sound" viewBox="0 0 20 20"><path d="M3.5 7.5v5h3l4 3.5V4l-4 3.5z" /><path d="M13.5 7.5a3.5 3.5 0 0 1 0 5M15.5 5a7 7 0 0 1 0 10" /></svg><svg class="i-muted" viewBox="0 0 20 20"><path d="M3.5 7.5v5h3l4 3.5V4l-4 3.5z" /><path d="m13.5 8 4 4M17.5 8l-4 4" /></svg></button>
+            </div>
+            <p id="c-orig-note" class="c-notes" hidden>Original audio plays at normal speed only.</p>
+          </section>
+          <section class="c-col c-col-fractals" aria-label="Fractals">
+            <h3 id="c-layout-label">Fractals</h3>
+            <div id="c-layout" class="c-seg c-seg-wide" role="radiogroup" aria-labelledby="c-layout-label"></div>
+            <p id="c-layout-note" class="c-layout-note"></p>
+            <div id="c-every-row" class="c-row" hidden><label for="c-every">Bars for each fractal</label><select id="c-every"></select></div>
+            <ol id="c-set" class="c-set" aria-label="Set list" hidden></ol>
+          </section>
         </div>
-        <div id="c-every-row" class="c-row" hidden><label for="c-every">Bars for each fractal</label><select id="c-every"></select></div>
-        <ol id="c-set" class="c-set" aria-label="Set list" hidden></ol>
-        <ul id="c-parts" class="c-parts" aria-label="Parts"></ul>
-        <div id="c-orig-row" class="c-row c-orig" hidden>
-          <span>Original audio</span>
-          <input id="c-level" type="range" min="0" max="100" step="1" value="30" aria-label="Level of the original audio" />
-          <button id="c-orig" class="c-mute" aria-pressed="false" aria-label="Play the original audio underneath">Off</button>
-        </div>
-        <p id="c-orig-note" class="c-notes" hidden>Original audio plays at normal speed only.</p>
-        <p id="c-notes" class="c-notes"></p>
-        <p id="c-prep" class="c-prep" hidden>Preparing the picture</p>
-        <div class="c-actions">
-          <button id="c-play" class="start">Play</button>
-          <button id="c-edit" class="c-edit">Edit notes</button>
-          <button id="c-record" class="c-edit">Record video</button>
-          <button id="c-share" class="c-edit">Copy song link</button>
-        </div>
-        <p id="c-link-note" class="c-notes" hidden></p>
-        <p id="c-rec-note" class="c-notes" hidden></p>
-        <p id="c-rec-support" class="c-notes c-support" hidden></p>
+        <footer class="c-foot">
+          <p id="c-notes" class="c-notes"></p>
+          <p id="c-prep" class="c-prep" hidden>Preparing the picture</p>
+          <div class="c-actions">
+            <button id="c-play" class="start c-play"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6L12.6 8z" /></svg>Play</button>
+            <button id="c-edit" class="round c-tool" aria-label="Edit notes"><svg viewBox="0 0 20 20"><path d="m4 16 .8-3.4L13 4.4a1.6 1.6 0 0 1 2.3 0l.3.3a1.6 1.6 0 0 1 0 2.3l-8.2 8.2z" /><path d="m11.5 6 2.5 2.5" /></svg></button>
+            <button id="c-record" class="round c-tool" aria-label="Record video"><svg viewBox="0 0 20 20"><rect x="2.5" y="5.5" width="10.5" height="9" rx="2" /><path d="m13 9 4.5-2.5v7L13 11" /></svg></button>
+            <button id="c-share" class="round c-tool" aria-label="Copy song link"><svg viewBox="0 0 20 20"><path d="M8.5 11.5a3 3 0 0 0 4.2 0l2.6-2.6a3 3 0 0 0-4.2-4.2l-1 1M11.5 8.5a3 3 0 0 0-4.2 0l-2.6 2.6a3 3 0 0 0 4.2 4.2l1-1" /></svg></button>
+          </div>
+          <p id="c-rec-note" class="c-notes" hidden></p>
+          <p id="c-rec-support" class="c-notes c-support" hidden></p>
+        </footer>
       </div>
     </section>
 
