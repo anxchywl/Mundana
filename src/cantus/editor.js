@@ -322,7 +322,6 @@ export const initEditor = (api) => {
       hi = Math.max(hi, Math.ceil(n.midi));
     }
     axis = [lo, hi];
-    q('#e-approx').hidden = !t.notes.some((n) => n.source === 'audio');
   };
 
   // ---------- drawing ----------

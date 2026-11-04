@@ -220,7 +220,7 @@
     <!-- the song's notes: a piano roll to fix them and to play any part of the song -->
     <section id="editor" class="card editor" aria-label="Notes" aria-hidden="true">
       <div class="e-head">
-        <p class="e-title">Notes<span id="e-approx" class="e-approx" hidden>approximate</span></p>
+        <p class="e-title">Notes</p>
         <output id="e-time" class="e-time">0:00 / 0:00</output>
         <span id="e-count" class="e-count"></span>
         <div class="e-tools" role="toolbar" aria-label="Edit the notes">
@@ -253,6 +253,7 @@
       <span class="t-paused">Paused</span>
       <output id="t-time" class="t-time">0:00 / 0:00</output>
       <input id="t-seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Song position" />
+      <button id="t-edit" class="round sm" aria-label="Edit notes" title="Edit notes"><svg viewBox="0 0 20 20"><path d="m4 16 .8-3.4L13 4.4a1.6 1.6 0 0 1 2.3 0l.3.3a1.6 1.6 0 0 1 0 2.3l-8.2 8.2z" /><path d="m11.5 6 2.5 2.5" /></svg></button>
       <button id="t-stop" class="round sm" aria-label="Stop" title="Stop"><svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.2" /></svg></button>
     </div>
 

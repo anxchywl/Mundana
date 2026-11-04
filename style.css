@@ -1335,6 +1335,7 @@ body.song-panel .transport {
   vertical-align: 1px;
 }
 .transport #t-play:disabled,
+.transport #t-edit:disabled,
 .transport input:disabled {
   opacity: 0.35;
   cursor: default;
@@ -1431,15 +1432,6 @@ body.song-panel .transport {
   font-weight: 600;
   font-size: 17px;
 }
-.e-approx {
-  margin-left: 8px;
-  font-weight: 400;
-  font-size: 13px;
-  color: var(--blue);
-}
-.e-approx[hidden] {
-  display: none;
-}
 .e-time,
 .e-count {
   font-size: 13px;
@@ -1463,11 +1455,14 @@ body.song-panel .transport {
   cursor: default;
 }
 .e-tools select {
+  appearance: none;
+  -webkit-appearance: none;
   height: 32px;
-  padding: 0 10px;
+  padding: 0 28px 0 12px;
   border: 0;
   border-radius: 999px;
-  background: var(--surface-2);
+  /* its own arrow, well inside the rounded end, the same as the song panel's menus */
+  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%23f7f1e9' stroke-opacity='.6' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 12px center / 10px 6px;
   color: var(--paper);
   font: inherit;
   font-size: 14px;
@@ -1508,6 +1503,7 @@ body.song-panel .transport {
   outline-offset: 2px;
 }
 /* while the roll is open, what sits in the lower part of the screen steps aside; the song's bar sits just above it */
+body.editor-open .corner,
 body.editor-open .dock,
 body.editor-open .tools,
 body.editor-open .readout,
@@ -1519,6 +1515,10 @@ body.editor-open .hint {
 }
 body.editor-open .transport {
   bottom: calc(45vh + 12px);
+}
+/* the notes are already open */
+body.editor-open #t-edit {
+  display: none;
 }
 
 /* the transport bar sits centred above the dock, where the hint was */
@@ -2362,4 +2362,18 @@ body.show-on .hint {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* the piano roll's close button: only the cross */
+.editor #e-close,
+.editor #e-close:hover {
+  background: transparent;
+  box-shadow: none;
+}
+.editor #e-close {
+  color: var(--paper-2);
+  transition: color 0.15s;
+}
+.editor #e-close:hover {
+  color: var(--paper);
 }

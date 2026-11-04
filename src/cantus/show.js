@@ -908,6 +908,7 @@ export const initShow = (api) => {
   });
   live.editor = editor;
   $('#c-edit').addEventListener('click', () => editor.open());
+  $('#t-edit').addEventListener('click', () => editor.open());
 
   playBtn.addEventListener('click', () => (mode === 'playing' ? pause() : resume()));
   $('#c-record').addEventListener('click', () => startRecording());
@@ -1046,6 +1047,7 @@ export const initShow = (api) => {
     bar.classList.add('recording');
     playBtn.disabled = true;
     seek.disabled = true;
+    $('#t-edit').disabled = true;
     renderRecord();
     timeOut.textContent = 'Recording in 1';
     await sleep(COUNT_IN_MS);
@@ -1071,6 +1073,7 @@ export const initShow = (api) => {
     bar.classList.remove('recording');
     playBtn.disabled = false;
     seek.disabled = false;
+    $('#t-edit').disabled = false;
     if (r.counting) {
       r.recorder.release();
       renderRecord();
