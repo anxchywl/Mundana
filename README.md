@@ -28,6 +28,7 @@ The name comes from *musica mundana*, the old idea that the planets make music a
 - Fix a song's notes in a piano roll while it plays
 - Record the show as a video, or share the song as a link
 - Works on phones and runs entirely in the browser, with nothing to install
+- In English, Russian and Kazakh: it follows the browser's language, and Settings can change it
 
 ## Usage
 
@@ -60,6 +61,12 @@ Notes from a recording are approximate. They work well for a solo instrument or 
 band mix. Fix them in the piano roll, or turn on the original recording underneath.
 
 Limits: MIDI files up to 4 MB, recordings up to 50 MB, and songs up to 10 minutes and 20,000 notes.
+
+### Languages
+
+All text lives in English in the code and index.html. `src/i18n/ru.js` and `src/i18n/kk.js` map each English text to
+its translation; a missing entry falls back to English. To add a language, copy one of them, translate it and list it
+in `src/i18n.js`.
 
 ## Run locally
 

@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=Source+Serif+4:ital,wght@1,400&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=41" />
+    <link rel="stylesheet" href="style.css?v=42" />
   </head>
   <body>
     <main id="stage">
@@ -134,6 +134,14 @@
             <input data-input="rate" type="range" min="-36" max="24" step="1" value="0" />
           </label>
         </div>
+        <div class="set-group">
+          <p class="set-label">Language</p>
+          <div class="langs" data-no-tr>
+            <button data-lang="en" lang="en">English</button>
+            <button data-lang="ru" lang="ru">Русский</button>
+            <button data-lang="kk" lang="kk">Қазақша</button>
+          </div>
+        </div>
         <div class="set-links phone-only">
           <button data-act="snap">Save picture</button>
           <button data-act="reset">Reset view</button>
@@ -156,7 +164,7 @@
         <div class="c-head-text">
           <h2>Play a song</h2>
           <p class="lede">Choose a MIDI file or a recording and fractals play it: the melody, the chords, the bass and the drums. Every note is a point whose orbit loops at that pitch. The file stays on your device.</p>
-          <p id="c-title" class="c-title"></p>
+          <p id="c-title" class="c-title" data-no-tr></p>
           <p id="c-meta" class="c-meta"></p>
         </div>
         <label id="c-pick" class="c-file"><input id="c-file" type="file" accept=".mid,.midi,audio/midi,audio/*,.mp3,.wav,.m4a,.ogg,.oga,.opus,.flac" /><span class="c-pick-first">Choose a MIDI or audio file</span><svg class="c-pick-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h3.2l1.8 2h6A1.5 1.5 0 0 1 17 8.5v6a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z" /></svg></label>
@@ -290,6 +298,6 @@
       <div class="sheet"><h2>This browser cannot draw it.</h2><p>The explorer needs WebGL2. Try a current Chrome, Firefox, Safari or Edge.</p></div>
     </div>
 
-    <script type="module" src="src/main.js?v=41"></script>
+    <script type="module" src="src/main.js?v=42"></script>
   </body>
 </html>

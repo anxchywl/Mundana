@@ -608,9 +608,8 @@ body.sheet-open #stage {
 }
 .about .keys {
   display: grid;
-  grid-template-columns: repeat(3, auto);
-  justify-content: start;
-  gap: 8px 18px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 8px 14px;
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--surface-2);
@@ -624,7 +623,17 @@ body.sheet-open #stage {
   display: flex;
   align-items: center;
   gap: 7px;
-  white-space: nowrap;
+  min-width: 0;
+}
+.about .keys kbd {
+  flex: none;
+}
+/* the part names are longer in Russian and Kazakh: their column grows to fit them */
+html[lang='ru'] {
+  --part-w: 70px;
+}
+html[lang='kk'] {
+  --part-w: 84px;
 }
 .about kbd {
   min-width: 22px;
@@ -672,6 +681,27 @@ body.sheet-open #stage {
 }
 .swatches button:hover {
   background: var(--surface-2);
+}
+.langs {
+  display: flex;
+  gap: 6px;
+}
+.langs button {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 0;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--paper-2);
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.langs button:hover {
+  background: var(--surface-2);
+}
+.langs button.on {
+  background: var(--surface-3);
+  color: var(--paper);
 }
 .swatches button.on {
   background: var(--surface-3);
@@ -967,7 +997,8 @@ body.song-panel .transport {
 }
 .c-tracks .c-choose {
   flex: none;
-  width: 92px;
+  width: auto;
+  min-width: 92px;
 }
 .c-choose:hover,
 .c-choose[aria-expanded='true'],
@@ -1119,7 +1150,7 @@ body.song-panel .transport {
 .c-parts-head,
 .c-parts li {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) 96px 34px;
+  grid-template-columns: var(--part-w, 54px) minmax(0, 1fr) 64px 34px;
   align-items: center;
   gap: 6px;
 }
@@ -2057,7 +2088,7 @@ body.show-on .hint {
   }
   .c-parts-head,
   .c-parts li {
-    grid-template-columns: 50px minmax(0, 1fr) 84px 34px;
+    grid-template-columns: var(--part-w, 50px) minmax(0, 1fr) 56px 34px;
     gap: 5px;
   }
   .c-parts .c-choose {

@@ -157,6 +157,8 @@ const sync = (select) => {
   const text = select.selectedOptions[0]?.textContent ?? '';
   b.firstChild.textContent = text;
   b.setAttribute('aria-label', `${labelOf(select)}: ${text}`);
+  // a long name cut short on the button reads whole when pointed at
+  b.title = text;
 };
 
 /** give every <select> under root a menu of ours, and show what each one holds now */

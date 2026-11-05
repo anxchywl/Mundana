@@ -4,7 +4,8 @@
 // show plans again from it. The top of this file is plain JavaScript, so Node runs it in the tests; initEditor is
 // the part that needs a page.
 
-import {checkNote, byTime, timeToBeat, beatToTime, PARTS, DRUMS, MAX_SECONDS, MIN_NOTE} from './timeline.js?v=41';
+import {tr} from '../i18n.js?v=42';
+import {checkNote, byTime, timeToBeat, beatToTime, PARTS, DRUMS, MAX_SECONDS, MIN_NOTE} from './timeline.js?v=42';
 
 export const MAX_STEPS = 100; // undo steps
 export const HISTORY_NOTES = 200000; // and at most this many changed notes kept for them (see History)
@@ -488,7 +489,7 @@ export const initEditor = (api) => {
     ctx.restore();
     ctx.fillStyle = ink.paper3;
     ctx.font = '500 10px "Alegreya Sans", system-ui, sans-serif';
-    DRUMS.forEach((d, r) => ctx.fillText(DRUM_NAMES[d], 3, dTop + r * geo.drumRow + geo.drumRow / 2));
+    DRUMS.forEach((d, r) => ctx.fillText(tr(DRUM_NAMES[d]), 3, dTop + r * geo.drumRow + geo.drumRow / 2));
 
     // the ruler: bar numbers, and seconds below them
     ctx.fillStyle = ink.surface2;
@@ -602,7 +603,7 @@ export const initEditor = (api) => {
     for (const b of panel.querySelectorAll('[data-needs="selection"]')) b.disabled = none;
     q('#e-undo').disabled = !history?.past.length;
     q('#e-redo').disabled = !history?.future.length;
-    q('#e-count').textContent = selected.size ? `${selected.size.toLocaleString('en')} selected${heardAt()}` : '';
+    q('#e-count').textContent = selected.size ? tr('{n} selected', {n: selected.size.toLocaleString('en')}) + heardAt() : '';
     redraw();
   };
 
@@ -613,7 +614,7 @@ export const initEditor = (api) => {
     const n = tl().notes.find((x) => x.id === id);
     if (n?.midiMeasured === undefined) return '';
     const cents = Math.round((n.midiMeasured - n.midi) * 100);
-    return cents === 0 ? ', heard in tune' : `, heard ${Math.abs(cents)} cents ${cents > 0 ? 'sharp' : 'flat'}`;
+    return cents === 0 ? tr(', heard in tune') : tr(cents > 0 ? ', heard {n} cents sharp' : ', heard {n} cents flat', {n: Math.abs(cents)});
   };
 
   const commit = (t) => {
@@ -982,6 +983,8 @@ export const initEditor = (api) => {
   const editor = {
     open: show,
     close,
+    /** the language changed: the count and the drum names are written again */
+    relang: () => history && syncTools(),
     isOpen: () => open,
     /** a new song: a fresh history, nothing selected, the view on its first bars */
     load(timeline) {

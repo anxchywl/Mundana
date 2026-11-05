@@ -4,17 +4,18 @@
 // sounding note is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls
 // into it through a few small hooks; everything it needs from the page comes in `api`.
 
-import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=41';
-import {validateTimeline, cleanTitle} from './timeline.js?v=41';
-import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=41';
-import {Transport} from './scheduler.js?v=41';
-import {loadPoints} from './points.js?v=41';
-import {paramOf} from '../fractals.js?v=41';
-import {initEditor} from './editor.js?v=41';
-import {enhanceSelects} from './choose.js?v=41';
-import {countAction} from '../count.js?v=41';
-import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=41';
-import {Recorder, support, pickType, sizeText, fileName, COUNT_IN_MS} from './record.js?v=41';
+import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=42';
+import {validateTimeline, cleanTitle} from './timeline.js?v=42';
+import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=42';
+import {Transport} from './scheduler.js?v=42';
+import {loadPoints} from './points.js?v=42';
+import {paramOf} from '../fractals.js?v=42';
+import {initEditor} from './editor.js?v=42';
+import {enhanceSelects} from './choose.js?v=42';
+import {countAction} from '../count.js?v=42';
+import {tr, countWord, fractalText, getLang} from '../i18n.js?v=42';
+import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=42';
+import {Recorder, support, pickType, sizeText, fileName, COUNT_IN_MS} from './record.js?v=42';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -83,12 +84,14 @@ const clock = (s) => {
   const t = Math.max(0, Math.floor(s));
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
-const count = (n, one, many) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
+// a part's name inside a sentence: "the melody" in English, the panel's own label elsewhere
+const partName = (part) => (getLang() === 'en' ? part : tr(part[0].toUpperCase() + part.slice(1)));
+const fname = (f) => fractalText(f, 'name');
 const SPEAKER =
   '<svg class="i-sound" viewBox="0 0 20 20"><path d="M3.5 7.5v5h3l4 3.5V4l-4 3.5z" /><path d="M13.5 7.5a3.5 3.5 0 0 1 0 5M15.5 5a7 7 0 0 1 0 10" /></svg>' +
   '<svg class="i-muted" viewBox="0 0 20 20"><path d="M3.5 7.5v5h3l4 3.5V4l-4 3.5z" /><path d="m13.5 8 4 4M17.5 8l-4 4" /></svg>';
 const MIN_VOICES = 4; // the panel offers 4 to 6 voices
-const LEFT = {bass: ['bass note', 'bass notes'], chords: ['chord note', 'chord notes'], drums: ['drum hit', 'drum hits']};
+const LEFT = {bass: 'bassNote', chords: 'chordNote', drums: 'drumHit'};
 const MAX_DRAWN = 6;
 const EDIT_WAIT = 300; // ms without a new edit before the song is planned again
 const AUDIO_BYTES = 50 * 1024 * 1024;
@@ -165,7 +168,7 @@ export const initShow = (api) => {
       input.value = String(value);
       input.addEventListener('change', () => onPick(value));
       const text = document.createElement('span');
-      text.textContent = label;
+      text.textContent = tr(label);
       wrap.append(input, text);
       box.appendChild(wrap);
     }
@@ -260,7 +263,8 @@ export const initShow = (api) => {
   const showWork = (text, fraction = 0) => {
     pick.hidden = true;
     workBox.hidden = false;
-    if (stageOut.textContent !== text) stageOut.textContent = text;
+    const label = tr(text);
+    if (stageOut.textContent !== label) stageOut.textContent = label;
     fill.style.transform = `scaleX(${Math.max(0, Math.min(1, fraction))})`;
   };
   const endWork = () => {
@@ -362,7 +366,7 @@ export const initShow = (api) => {
     }
     let worker;
     try {
-      worker = new Worker(new URL('./analyse-worker.js?v=41', import.meta.url), {type: 'module'});
+      worker = new Worker(new URL('./analyse-worker.js?v=42', import.meta.url), {type: 'module'});
     } catch {
       endWork();
       api.toast('This browser cannot hear songs in the background. Try another browser.');
@@ -532,32 +536,33 @@ export const initShow = (api) => {
     panel.classList.toggle('has-song', Boolean(timeline));
     // the file button: under the words before there is a song, among the song's buttons after
     (timeline ? $('.c-foot .c-actions') : $('.c-head')).appendChild(pick);
-    pick.setAttribute('aria-label', timeline ? 'Choose another file' : 'Choose a MIDI or audio file');
+    pick.setAttribute('aria-label', tr(timeline ? 'Choose another file' : 'Choose a MIDI or audio file'));
     if (!timeline) return;
     $('#c-title').textContent = timeline.title;
     $('#c-meta').textContent = audioSong
-      ? `${clock(timeline.duration)}, ${count(timeline.notes.length, 'note', 'notes')} heard, about ${Math.round(timeline.tempo.bpm)} beats a minute`
-      : `${clock(timeline.duration)}, ${count(timeline.notes.length, 'note', 'notes')} found`;
+      ? tr('{time}, {count} heard, about {bpm} beats a minute', {time: clock(timeline.duration), count: countWord(timeline.notes.length, 'note'), bpm: Math.round(timeline.tempo.bpm)})
+      : tr('{time}, {count} found', {time: clock(timeline.duration), count: countWord(timeline.notes.length, 'note')});
     syncOriginal();
     const list = $('#c-tracks');
     list.replaceChildren();
-    timeline.tracks.forEach((tr, i) => {
+    timeline.tracks.forEach((track, i) => {
       const li = document.createElement('li');
       const name = document.createElement('span');
       name.className = 'c-name';
-      name.textContent = tr.name;
+      name.dataset.noTr = '';
+      name.textContent = track.name;
       const n = document.createElement('span');
       n.className = 'c-count';
-      n.textContent = tr.guessed ? `${count(tr.notes, 'note', 'notes')}, guessed as drums by its name` : count(tr.notes, 'note', 'notes');
+      n.textContent = track.guessed ? tr('{count}, guessed as drums by its name', {count: countWord(track.notes, 'note')}) : countWord(track.notes, 'note');
       const sel = document.createElement('select');
-      sel.setAttribute('aria-label', `Part for ${tr.name}`);
+      sel.setAttribute('aria-label', tr('Part for {name}', {name: track.name}));
       for (const [value, label] of PARTS) {
         const o = document.createElement('option');
         o.value = value;
-        o.textContent = label;
+        o.textContent = tr(label);
         sel.appendChild(o);
       }
-      sel.value = tr.part;
+      sel.value = track.part;
       sel.addEventListener('change', () => {
         stopShow();
         timeline = setTrackPart(timeline, i, sel.value);
@@ -574,25 +579,25 @@ export const initShow = (api) => {
     enhanceSelects(panel);
     const notes = [];
     if (audioSong) {
-      if (audioSong.info?.drumsOnly) notes.push('Almost nothing in it has a pitch, so it plays as drums.');
+      if (audioSong.info?.drumsOnly) notes.push(tr('Almost nothing in it has a pitch, so it plays as drums.'));
       else if (audioSong.info?.dense) {
-        notes.push(settings.parts.melody.mute ? 'A dense band mix plays simple: chords, bass and drums. Its melody is rough, so it starts muted.' : 'In a dense band mix the melody heard is rough.');
-      } else if (audioSong.info?.noisy) notes.push('This recording is noisy, so the notes are rough.');
+        notes.push(tr(settings.parts.melody.mute ? 'A dense band mix plays simple: chords, bass and drums. Its melody is rough, so it starts muted.' : 'In a dense band mix the melody heard is rough.'));
+      } else if (audioSong.info?.noisy) notes.push(tr('This recording is noisy, so the notes are rough.'));
     }
     for (const part of ['chords', 'bass', 'drums']) {
       const n = plan?.left[part];
-      if (n) notes.push(`${count(n, ...LEFT[part])} left out: more than ${plan.voices} voices.`);
+      if (n) notes.push(tr('{count} left out: more than {voices} voices.', {count: countWord(n, LEFT[part]), voices: plan.voices}));
     }
     if (plan?.drumsBorrowed) {
       notes.push(
         settings.layout === 'one'
-          ? `The drums use sounds of the Burning ship: the ${byKey.get(plan.fractal).name} has none.`
-          : 'The drums use sounds of the Burning ship where a fractal has none.',
+          ? tr('The drums use sounds of the Burning ship: the {name} has none.', {name: fname(byKey.get(plan.fractal))})
+          : tr('The drums use sounds of the Burning ship where a fractal has none.'),
       );
     }
-    if (plan?.moved) notes.push(`${count(plan.moved, 'note was', 'notes were')} moved by whole octaves to fit.`);
-    if (plan?.skipped) notes.push(`${count(plan.skipped, 'lower note', 'lower notes')} under the melody left out.`);
-    if (timeline.dropped) notes.push(`${count(timeline.dropped, 'very short note', 'very short notes')} dropped.`);
+    if (plan?.moved) notes.push(tr('{count} moved by whole octaves to fit.', {count: countWord(plan.moved, 'note')}));
+    if (plan?.skipped) notes.push(tr('{count} under the melody left out.', {count: countWord(plan.skipped, 'lowerNote')}));
+    if (timeline.dropped) notes.push(tr('{count} dropped.', {count: countWord(timeline.dropped, 'shortNote')}));
     $('#c-notes').textContent = notes.join(' ');
     $('#c-notes').hidden = !notes.length;
     $('#c-play').disabled = !plan?.presses.length;
@@ -654,32 +659,33 @@ export const initShow = (api) => {
       li.classList.toggle('muted', s.mute);
       const name = document.createElement('span');
       name.className = 'c-part';
-      name.textContent = label;
+      name.textContent = tr(label);
       li.appendChild(name);
       if (part === 'drums') {
         const where = document.createElement('span');
         where.className = 'c-where';
-        where.textContent = settings.layout === 'one' ? 'On the fractal on screen' : 'Fractal on screen';
+        where.textContent = tr(settings.layout === 'one' ? 'On the fractal on screen' : 'Fractal on screen');
         li.appendChild(where);
       } else {
         // with a set list every part plays the fractal on screen
         let fr;
         if (settings.layout === 'one') {
           fr = document.createElement('select');
-          fr.setAttribute('aria-label', `Fractal for the ${part}`);
-          for (const k of keys) fr.appendChild(option(k, byKey.get(k).name));
+          fr.setAttribute('aria-label', tr('Fractal for the {part}', {part: partName(part)}));
+          for (const k of keys) fr.appendChild(option(k, fname(byKey.get(k))));
           fr.value = s.fractal;
           fr.addEventListener('change', () => change(() => (s.fractal = fr.value)));
         } else {
           fr = document.createElement('span');
           fr.className = 'c-where c-here';
-          fr.textContent = 'Fractal on screen';
+          fr.textContent = tr('Fractal on screen');
         }
         const per = document.createElement('select');
-        per.setAttribute('aria-label', `Preferred period for the ${part}`);
+        per.setAttribute('aria-label', tr('Preferred period for the {part}', {part: partName(part)}));
         const used = settings.layout === 'one' ? [s.fractal] : settings.setList;
         const periods = [...new Set(used.flatMap((k) => points.fractals[k].periods))].sort((a, b) => a - b);
-        for (const p of periods) per.appendChild(option(p, `Period ${p}`));
+        // the column says Period; the menu says only the number, which fits in every language
+        for (const p of periods) per.appendChild(option(p, String(p)));
         // the preferred period need not be one the fractal has; the nearest one it has is shown
         per.value = String(periods.reduce((a, b) => (Math.abs(b - s.period) < Math.abs(a - s.period) ? b : a)));
         per.addEventListener('change', () => change(() => (s.period = Number(per.value))));
@@ -688,9 +694,9 @@ export const initShow = (api) => {
       const mute = document.createElement('button');
       mute.className = `c-mute c-speaker${s.mute ? ' is-off' : ''}`;
       mute.innerHTML = SPEAKER;
-      mute.title = s.mute ? `Turn the ${part} back on` : `Mute the ${part}`;
+      mute.title = s.mute ? tr('Turn the {part} back on', {part: partName(part)}) : tr('Mute the {part}', {part: partName(part)});
       mute.setAttribute('aria-pressed', String(s.mute));
-      mute.setAttribute('aria-label', `Mute the ${part}`);
+      mute.setAttribute('aria-label', tr('Mute the {part}', {part: partName(part)}));
       mute.addEventListener('click', () =>
         change(() => {
           s.mute = !s.mute;
@@ -714,8 +720,8 @@ export const initShow = (api) => {
   const renderLayout = (keys) => {
     setRadio(layoutBox, settings.layout);
     $('#c-layout-note').textContent = {
-      one: 'Each part plays the fractal you choose for it.',
-      sections: `${count(timeline.sections.length, 'section', 'sections')} found. Each one gets its own fractal.`,
+      one: tr('Each part plays the fractal you choose for it.'),
+      sections: tr('{count} found. Each one gets its own fractal.', {count: countWord(timeline.sections.length, 'section')}),
       bars: '',
     }[settings.layout];
     $('#c-layout-note').hidden = !$('#c-layout-note').textContent;
@@ -735,10 +741,10 @@ export const initShow = (api) => {
       const li = document.createElement('li');
       const name = document.createElement('span');
       name.className = 'c-part';
-      name.textContent = settings.layout === 'sections' ? `${sections[i].label} ${clock(sections[i].start)}` : String(i + 1);
+      name.textContent = settings.layout === 'sections' ? `${tr(sections[i].label)} ${clock(sections[i].start)}` : String(i + 1);
       const fr = document.createElement('select');
-      fr.setAttribute('aria-label', settings.layout === 'sections' ? `Fractal for section ${sections[i].label} at ${clock(sections[i].start)}` : `Fractal ${i + 1}`);
-      for (const k of keys) fr.appendChild(option(k, byKey.get(k).name));
+      fr.setAttribute('aria-label', settings.layout === 'sections' ? tr('Fractal for section {label} at {time}', {label: tr(sections[i].label), time: clock(sections[i].start)}) : tr('Fractal {n}', {n: i + 1}));
+      for (const k of keys) fr.appendChild(option(k, fname(byKey.get(k))));
       fr.value = set[i];
       fr.addEventListener('change', () => change(() => (settings.setList[i] = fr.value)));
       li.append(name, fr);
@@ -787,8 +793,8 @@ export const initShow = (api) => {
     bar.hidden = mode === 'off';
     document.body.classList.toggle('show-on', mode !== 'off');
     bar.classList.toggle('paused', mode === 'paused');
-    playBtn.setAttribute('aria-label', mode === 'playing' ? 'Pause' : 'Resume');
-    playBtn.title = mode === 'playing' ? 'Pause' : 'Resume';
+    playBtn.setAttribute('aria-label', tr(mode === 'playing' ? 'Pause' : 'Resume'));
+    playBtn.title = tr(mode === 'playing' ? 'Pause' : 'Resume');
     if (transport) seek.max = String(transport.duration);
     updateBar(true);
   };
@@ -992,7 +998,7 @@ export const initShow = (api) => {
     const btn = $('#c-record');
     const note = $('#c-rec-note');
     btn.disabled = !recType || !plan?.presses.length || !!rec;
-    note.textContent = 'Video recording is not supported in this browser. Try Chrome or Safari.';
+    note.textContent = tr('Video recording is not supported in this browser. Try Chrome or Safari.');
     note.hidden = !timeline || Boolean(recType);
     const box = $('#c-rec-support');
     box.hidden = !api.debugOn;
@@ -1053,7 +1059,7 @@ export const initShow = (api) => {
     seek.disabled = true;
     $('#t-edit').disabled = true;
     renderRecord();
-    timeOut.textContent = 'Recording in 1';
+    timeOut.textContent = tr('Recording in 1');
     await sleep(COUNT_IN_MS);
     if (rec?.recorder !== recorder) return;
     rec.counting = false;
@@ -1093,7 +1099,7 @@ export const initShow = (api) => {
     // the download has its own copy once it starts
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     renderRecord();
-    api.toast(message || `Video saved, ${sizeText(blob.size)}.`);
+    api.toast(message || tr('Video saved, {size}.', {size: sizeText(blob.size)}));
   }
 
   /** after each frame of the page: the picture into the recording, and the end of a range */
@@ -1247,6 +1253,12 @@ export const initShow = (api) => {
     },
     togglePanel,
     closePanel,
+    /** the language changed: everything the panel wrote is written again */
+    relang: () => {
+      if (timeline) renderSong();
+      if (transport) updateBar(true);
+      editor.relang();
+    },
     editorOpen: () => editor.isOpen(),
     frame,
     draw,

@@ -1,3 +1,4 @@
+import {tr} from '../i18n.js?v=42';
 // Recording a show as a video file, picture and sound together, on the device. Each frame the fractal canvas and the
 // orbit canvas are drawn into a third canvas that is not on the page, with a small caption; that canvas is captured
 // one frame per frame of the show, and the sound is taken from the page's volume node, the same one the speakers
@@ -50,9 +51,9 @@ export const estimate = (seconds, video = VIDEO_BITS, audio = AUDIO_BITS) => ((v
 /** "12 MB", "1.4 GB" */
 export const sizeText = (bytes) => {
   const mb = bytes / 1e6;
-  if (mb < 1) return 'under 1 MB';
-  if (mb < 1000) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb).toLocaleString('en')} MB`;
-  return `${(mb / 1000).toFixed(1)} GB`;
+  if (mb < 1) return tr('under 1 MB');
+  if (mb < 1000) return tr('{n} MB', {n: mb < 10 ? mb.toFixed(1) : Math.round(mb).toLocaleString('en')});
+  return tr('{n} GB', {n: (mb / 1000).toFixed(1)});
 };
 
 /** "<title> - Mundana.<ext>", the title cleaned of anything but letters, digits, spaces and hyphens */
@@ -125,7 +126,7 @@ export class Recorder {
     g.font = `500 ${px}px "Alegreya Sans", system-ui, sans-serif`;
     g.textBaseline = 'alphabetic';
     g.fillStyle = this.paper;
-    const caption = this.title ? `“${this.title}” from Mundana` : 'Mundana';
+    const caption = this.title ? tr('“{title}” from Mundana', {title: this.title}) : 'Mundana';
     g.fillText(caption, Math.round(px * 1.2), h - Math.round(px * 1.1), w - px * 2.4);
     if (this.track.requestFrame) this.track.requestFrame();
     this.frames++;

@@ -1,7 +1,12 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=41';
-import {spots} from './spots.js?v=41';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=41';
-import {countVisit, countOnce} from './count.js?v=41';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=42';
+import {spots} from './spots.js?v=42';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=42';
+import {countVisit, countOnce} from './count.js?v=42';
+import {tr, countWord, fractalText, paramName, translatePage, onLang, setLang, getLang} from './i18n.js?v=42';
+
+// the page's own words in the chosen language, before anything is drawn
+if (getLang() !== 'en') translatePage();
+const fname = (f) => fractalText(f, 'name');
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -131,7 +136,7 @@ const recording = () => !!cantus?.recording();
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=41', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=42', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -287,7 +292,7 @@ const setJulia = (c) => {
 
 const toggleJulia = () => {
   if (cur().noJulia) {
-    toast(`${cur().name} has no Julia sets.`);
+    toast(tr('{name} has no Julia sets.', {name: fname(cur())}));
     return;
   }
   if (state.julia && !state.picking) {
@@ -453,7 +458,7 @@ const hideToast = () => {
 };
 const toast = (msg) => {
   const t = $('#toast');
-  t.textContent = msg;
+  t.textContent = tr(msg);
   // on a phone the message takes the name card's exact place while the card steps aside
   if (!desktop()) {
     const r = $('.info').getBoundingClientRect();
@@ -494,18 +499,19 @@ const showReadout = () => {
   const info = state.info;
   el.classList.toggle('escaped', info.kind === 'escape');
   if (info.kind === 'escape') {
-    $('#r-what').textContent = `Escapes after ${info.steps.toLocaleString('en')} steps`;
-    $('#r-note').textContent = 'a click, then silence';
+    $('#r-what').textContent = tr('Escapes after {n} steps', {n: info.steps.toLocaleString('en')});
+    $('#r-note').textContent = tr('a click, then silence');
   } else if (info.kind === 'cycle' && info.period === 1) {
-    $('#r-what').textContent = 'Period 1';
-    $('#r-note').textContent = 'a still point, no pitch';
+    $('#r-what').textContent = tr('Period {n}', {n: 1});
+    $('#r-note').textContent = tr('a still point, no pitch');
   } else if (info.kind === 'cycle') {
     const p = pitchOf(info.period);
-    $('#r-what').textContent = `Period ${info.period}`;
-    $('#r-note').textContent = p.hz >= 20 ? `${p.hz.toFixed(p.hz < 100 ? 1 : 0)} Hz, ${p.name}${p.cents}` : `${p.hz.toFixed(2)} Hz, a rhythm`;
+    $('#r-what').textContent = tr('Period {n}', {n: info.period});
+    $('#r-note').textContent =
+      p.hz >= 20 ? tr('{hz} Hz, {note}', {hz: p.hz.toFixed(p.hz < 100 ? 1 : 0), note: `${p.name}${p.cents}`}) : tr('{hz} Hz, a rhythm', {hz: p.hz.toFixed(2)});
   } else {
-    $('#r-what').textContent = 'Chaos';
-    $('#r-note').textContent = 'noise, no steady note';
+    $('#r-what').textContent = tr('Chaos');
+    $('#r-note').textContent = tr('noise, no steady note');
   }
   if (desktop()) fitLine($('#r-what'));
   else $('#r-what').style.fontSize = '';
@@ -523,7 +529,7 @@ const renderParam = () => {
     Object.assign(r, {min: f.param.min, max: f.param.max, step: f.param.step});
     r.value = kOf();
   });
-  $$('.param-name').forEach((o) => (o.textContent = f.param.name));
+  $$('.param-name').forEach((o) => (o.textContent = paramName(f)));
   $$('.param-value').forEach((o) => (o.textContent = kOf().toFixed(decimals(f.param.step))));
 };
 
@@ -566,6 +572,19 @@ const warm = (i) => {
   }, 180);
 };
 
+// a card is found by its name in English and in the language on screen
+const searchText = (f, fam) => `${f.name} ${fname(f)} ${f.formula} ${fam.name} ${fractalText(fam, 'name')}`.toLowerCase();
+
+/** the gallery in the current language, where it already stands, so its pictures stay */
+const relabelGallery = () => {
+  $$('#gallery-body h3[data-fam]').forEach((h) => (h.textContent = fractalText(families.find((x) => x.key === h.dataset.fam), 'name')));
+  $$('#gallery-body .card-f').forEach((b) => {
+    const f = fractals[Number(b.dataset.index)];
+    b.querySelector('.cname').textContent = fname(f);
+    b.dataset.search = searchText(f, families.find((x) => x.key === f.family));
+  });
+};
+
 const buildGallery = () => {
   const body = $('#gallery-body');
   body.innerHTML = '';
@@ -574,7 +593,8 @@ const buildGallery = () => {
     sec.className = 'fam';
     sec.style.viewTransitionName = `fam-${fam.key}`;
     const h = document.createElement('h3');
-    h.textContent = fam.name;
+    h.textContent = fractalText(fam, 'name');
+    h.dataset.fam = fam.key;
     sec.appendChild(h);
     const grid = document.createElement('div');
     grid.className = 'cards';
@@ -583,7 +603,7 @@ const buildGallery = () => {
       const b = document.createElement('button');
       b.className = 'card-f';
       b.dataset.index = i;
-      b.dataset.search = `${f.name} ${f.formula} ${fam.name}`.toLowerCase();
+      b.dataset.search = searchText(f, fam);
       // built from text nodes, never from HTML strings
       const thumb = document.createElement('span');
       thumb.className = 'thumb';
@@ -593,7 +613,7 @@ const buildGallery = () => {
       thumb.appendChild(img);
       const name = document.createElement('span');
       name.className = 'cname fit';
-      name.textContent = f.name;
+      name.textContent = fname(f);
       const formula = document.createElement('span');
       formula.className = 'cformula fit';
       formula.textContent = f.formula;
@@ -922,7 +942,7 @@ const tick = (now) => {
       console.warn(err);
       if (state.morph) state.morph = null;
       else if (state.type !== 0) {
-        toast(`${cur().name} cannot be drawn on this device.`);
+        toast(tr('{name} cannot be drawn on this device.', {name: fname(cur())}));
         setFractal(0, false, false);
       }
     }
@@ -1241,14 +1261,15 @@ const actions = {
 };
 
 document.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-act], [data-colour]');
+  const b = e.target.closest('[data-act], [data-colour], [data-lang]');
   if (!b) {
     // the path, not the target: a button in a panel may have been rebuilt by its own click
     if (!e.composedPath().some((el) => el.classList?.contains('pop'))) closeSettings();
     return;
   }
   if (!b.closest('.pop') && !['settings', 'about', 'song'].includes(b.dataset.act)) closeSettings();
-  if (b.dataset.colour) setColour(Number(b.dataset.colour));
+  if (b.dataset.lang) setLang(b.dataset.lang);
+  else if (b.dataset.colour) setColour(Number(b.dataset.colour));
   else actions[b.dataset.act]?.();
 });
 
@@ -1316,23 +1337,24 @@ const syncUI = () => {
     freshTimer = setTimeout(() => card.classList.remove('fresh'), 900);
   }
   shownName = f.name;
-  $$('.f-name').forEach((el) => (el.textContent = f.name));
+  $$('.f-name').forEach((el) => (el.textContent = fname(f)));
   $$('.f-formula').forEach((el) => (el.textContent = f.formula));
-  $$('.f-note').forEach((el) => (el.textContent = f.note));
+  $$('.f-note').forEach((el) => (el.textContent = fractalText(f, 'note')));
   fitAll();
   $$('[data-colour]').forEach((b) => b.classList.toggle('on', Number(b.dataset.colour) === state.colour));
-  $$('.bar-colour').forEach((el) => (el.textContent = COLOUR_NAMES[state.colour]));
+  $$('.bar-colour').forEach((el) => (el.textContent = tr(COLOUR_NAMES[state.colour])));
+  $$('[data-lang]').forEach((b) => b.classList.toggle('on', b.dataset.lang === getLang()));
   $$('[data-act="damp"]').forEach((b) => b.classList.toggle('on', !state.sustain));
   $$('[data-act="animate"]').forEach((b) => b.classList.toggle('on', state.animate));
   $$('[data-act="julia"]').forEach((b) => {
     b.classList.toggle('on', !!state.julia);
     b.classList.toggle('disabled', !!f.noJulia);
   });
-  $$('.julia-lbl').forEach((l) => (l.textContent = state.picking ? 'Julia set: choose c' : 'Julia set'));
+  $$('.julia-lbl').forEach((l) => (l.textContent = tr(state.picking ? 'Julia set: choose c' : 'Julia set')));
   // pitch reads as a musical shift from normal: whole octaves, or semitones in between
   const st = Math.round(12 * Math.log2(state.rate / RATE));
   const sign = st > 0 ? '+' : '−';
-  const shift = st === 0 ? 'normal' : st % 12 === 0 ? `${sign}${Math.abs(st) / 12} oct` : `${sign}${Math.abs(st)} semitones`;
+  const shift = st === 0 ? tr('normal') : st % 12 === 0 ? tr('{n} oct', {n: `${sign}${Math.abs(st) / 12}`}) : `${sign}${countWord(Math.abs(st), 'semitone')}`;
   $$('.rate-value').forEach((el) => (el.textContent = shift));
   stage.classList.toggle('picking', state.picking);
   showReadout();
@@ -1395,7 +1417,7 @@ const loadHash = () => {
     const o = orbitOf(f, p, state.julia);
     state.info = analyse(f, o.z0, o.c, kOf());
     state.shared = true;
-    $('#hint').textContent = 'Someone shared this point. Press the ringed dot to hear it.';
+    $('#hint').textContent = tr('Someone shared this point. Press the ringed dot to hear it.');
   }
   syncUI();
   return true;
@@ -1406,7 +1428,7 @@ const loadHash = () => {
 /** the song mode, loaded the first time it is needed; true when it is there */
 const loadCantus = async () => {
   if (!cantus) {
-    cantusLoading ||= import('./cantus/show.js?v=41').then((m) =>
+    cantusLoading ||= import('./cantus/show.js?v=42').then((m) =>
       m.initShow({
         state,
         fractals,
@@ -1496,5 +1518,13 @@ if (songLink) openSongLink(location.hash);
 requestAnimationFrame(tick);
 // draw the gallery's small pictures while the visitor is still reading
 setTimeout(makeThumbs, 1500);
+
+// a new language: the page's own words were changed by i18n.js; what this script wrote is written again
+onLang(() => {
+  syncUI();
+  relabelGallery();
+  cantus?.relang();
+  requestAnimationFrame(fitAll);
+});
 
 countVisit();
