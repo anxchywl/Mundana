@@ -794,9 +794,9 @@ export const initShow = (api) => {
 
   const updateBar = (force = false) => {
     if (!transport) return;
-    if (rec) return showRecording(force);
     const t = dragging ? Number(seek.value) : transport.now();
     if (!dragging) seek.value = String(t);
+    if (rec) return showRecording(force);
     const text = `${clock(t)} / ${clock(transport.duration)}`;
     if (force || text !== shownTime) timeOut.textContent = shownTime = text;
   };
@@ -920,7 +920,9 @@ export const initShow = (api) => {
   });
   seek.addEventListener('change', () => {
     dragging = false;
-    transport?.seek(Number(seek.value));
+    // a recording of a range stays in that range, and saves when it reaches the end
+    const to = Number(seek.value);
+    transport?.seek(rec ? Math.max(rec.from, Math.min(rec.to, to)) : to);
     updateBar(true);
   });
 
@@ -1053,6 +1055,7 @@ export const initShow = (api) => {
     await sleep(COUNT_IN_MS);
     if (rec?.recorder !== recorder) return;
     rec.counting = false;
+    seek.disabled = false;
     recorder.start();
     transport.play();
   };
@@ -1061,7 +1064,8 @@ export const initShow = (api) => {
   let recText = '';
   const showRecording = (force) => {
     if (rec.counting) return;
-    const text = `${clock(transport.now() - rec.from)}, ${sizeText(rec.recorder.bytes)}`;
+    // the length of the video, which a skip does not change
+    const text = `${clock((performance.now() - rec.recorder.started) / 1000)}, ${sizeText(rec.recorder.bytes)}`;
     if (force || text !== recText) timeOut.textContent = recText = text;
   };
 

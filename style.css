@@ -1323,7 +1323,7 @@ body.song-panel .transport {
   font-variant-numeric: tabular-nums;
   white-space: pre-line;
 }
-/* while a show is recorded: a red dot before the time and size, and no pause or seek */
+/* while a show is recorded: a red dot before the time and size, and no pause; the slider can still skip */
 .transport.recording .t-time::before {
   content: '';
   display: inline-block;
