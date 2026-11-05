@@ -1,6 +1,6 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=33';
-import {spots} from './spots.js?v=33';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=33';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=40';
+import {spots} from './spots.js?v=40';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=40';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -130,7 +130,7 @@ const recording = () => !!cantus?.recording();
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=33', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=40', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -1404,7 +1404,7 @@ const loadHash = () => {
 /** the song mode, loaded the first time it is needed; true when it is there */
 const loadCantus = async () => {
   if (!cantus) {
-    cantusLoading ||= import('./cantus/show.js?v=33').then((m) =>
+    cantusLoading ||= import('./cantus/show.js?v=40').then((m) =>
       m.initShow({
         state,
         fractals,

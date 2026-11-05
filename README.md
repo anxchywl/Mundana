@@ -39,7 +39,7 @@ from the bar at the bottom. Pressing the picture, switching fractal or hiding th
 carry on where it stopped.
 
 The panel lists every track of the file with the part it plays (melody, bass, chords or drums), and you can change
-it. Below that you choose how many voices play at once, and for each part its fractal, the loop length it prefers
+it. Beside that you choose how many voices play at once, and for each part its fractal, the loop length it prefers
 (its period) and whether it plays at all. By default the melody and the chords play on the Mandelbrot set, the bass on
 the Multibrot, and the drums on the fractal on screen. The file is read in your browser and never leaves your device.
 
@@ -66,7 +66,7 @@ A recording is turned into notes in your browser, in the background, with a bar 
 Cancel button: the melody, the bass, the chords, the drums, the beat and the sections. It takes a few seconds (a 4
 minute song took about 5 seconds on a recent laptop). The notes are approximate: good for a solo instrument or a clear
 voice, decent for the melody and bass of a band, rough for the exact chords of a dense mix. Fix them in the piano
-roll, where notes heard in a recording are drawn fainter the less sure they are and the header says "approximate".
+roll, where notes heard in a recording are drawn fainter the less sure they are.
 Turn on Original audio to hear the recording under the fractals, 30 percent loud by default. The recording never
 leaves your device. Recordings can be up to 50 MB; a song longer than 10 minutes plays its first 10 minutes if you
 agree.
@@ -84,8 +84,8 @@ is never touched.
 
 Press Copy song link in the song panel. The link holds the song's notes, its parts, its settings and your edits, so
 whoever opens it gets the same show, ready to play: it opens the song panel and waits for Play. Song links carry
-notes, never sound, not even for a song made from a recording; the panel says so before you copy. The panel shows how
-long the link is: a short MIDI song takes a few hundred characters, a 4 minute song heard in a recording about 14,000.
+notes, never sound, not even for a song made from a recording. A short MIDI song takes a few hundred characters, a 4
+minute song heard in a recording about 14,000.
 Songs whose link would be over 32,768 characters cannot be shared this way. Opening a link checks every part of it
 first; a damaged one is turned away whole, with a message, and the page opens as normal.
 
@@ -93,9 +93,10 @@ first; a damaged one is turned away whole, with a message, and the page opens as
 
 Press Record video in the song panel to save the show as a video file, picture and sound together. After a count of
 one second it plays the song from the start (or the range you chose in the piano roll) to the end, in real time, and
-then saves `<song title> - Mundana.mp4` (or `.webm`). The panel shows the size to expect before you start: about 5
-Mbps, so about 19 MB for 30 seconds and 154 MB for 4 minutes. While it records, the bar shows a red dot, the time and
-the size so far; Stop saves what has been recorded. Pause is off, pressing the picture does nothing, and hiding the
+then saves `<song title> - Mundana.mp4` (or `.webm`), at about 5 Mbps, so about 19 MB for 30 seconds and 154 MB for 4
+minutes. While it records, the bar shows a red dot, the video's length and size so far; drag the slider to skip to
+another part of the song, and the video carries on from there. Stop saves what has been recorded. Pause is off,
+pressing the picture does nothing, and hiding the
 tab stops the recording and saves it. The video is made in your browser and never leaves your device.
 
 Formats: Chrome records MP4 (H.264 video, AAC sound), measured on Chrome 155 for macOS. Other browsers were not tested
