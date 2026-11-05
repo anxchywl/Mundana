@@ -4,16 +4,17 @@
 // sounding note is drawn as its orbit. main.js loads this module the first time the music button is pressed and calls
 // into it through a few small hooks; everything it needs from the page comes in `api`.
 
-import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=40';
-import {validateTimeline, cleanTitle} from './timeline.js?v=40';
-import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=40';
-import {Transport} from './scheduler.js?v=40';
-import {loadPoints} from './points.js?v=40';
-import {paramOf} from '../fractals.js?v=40';
-import {initEditor} from './editor.js?v=40';
-import {enhanceSelects} from './choose.js?v=40';
-import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=40';
-import {Recorder, support, pickType, sizeText, fileName, COUNT_IN_MS} from './record.js?v=40';
+import {parseMidi, setTrackPart, MAX_BYTES} from './midi.js?v=41';
+import {validateTimeline, cleanTitle} from './timeline.js?v=41';
+import {planShow, settingsOf, pitchedFractals, cameraAt, morphAt, fractalAt, DEFAULTS, MAX_VOICES, MAX_SET, EVERY} from './mapper.js?v=41';
+import {Transport} from './scheduler.js?v=41';
+import {loadPoints} from './points.js?v=41';
+import {paramOf} from '../fractals.js?v=41';
+import {initEditor} from './editor.js?v=41';
+import {enhanceSelects} from './choose.js?v=41';
+import {countAction} from '../count.js?v=41';
+import {encodeSong, decodeSong, canShare, MAX_HASH, TOO_LONG, UNSUPPORTED} from './share.js?v=41';
+import {Recorder, support, pickType, sizeText, fileName, COUNT_IN_MS} from './record.js?v=41';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -361,7 +362,7 @@ export const initShow = (api) => {
     }
     let worker;
     try {
-      worker = new Worker(new URL('./analyse-worker.js?v=40', import.meta.url), {type: 'module'});
+      worker = new Worker(new URL('./analyse-worker.js?v=41', import.meta.url), {type: 'module'});
     } catch {
       endWork();
       api.toast('This browser cannot hear songs in the background. Try another browser.');
@@ -825,6 +826,7 @@ export const initShow = (api) => {
     flushEdits();
     if (!plan?.presses.length) return;
     transport?.stop();
+    countAction('play-song');
     // the whole song: a range chosen in the editor is let go
     editor.setRange(null);
     togglePanel(false);
@@ -1057,6 +1059,7 @@ export const initShow = (api) => {
     rec.counting = false;
     seek.disabled = false;
     recorder.start();
+    countAction('record-video');
     transport.play();
   };
 

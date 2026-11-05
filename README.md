@@ -20,6 +20,9 @@ What you hear depends on where you press:
 The name comes from *musica mundana*, the music of the world: the old belief that the planets make music as they
 move along their orbits, music no one can hear. Here you can.
 
+Visits and three actions (a first press, playing a song, recording a video) are counted anonymously with
+[GoatCounter](https://www.goatcounter.com), without cookies. Your files, songs and shared links are never sent.
+
 ## How to use it
 
 1. **Press and hold** anywhere on the picture. Drag to glide from sound to sound.

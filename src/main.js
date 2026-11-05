@@ -1,6 +1,7 @@
-import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=40';
-import {spots} from './spots.js?v=40';
-import {Renderer, MAX_FRAMES} from './renderer.js?v=40';
+import {fractals, families, analyse, noteName, orbitOf, paramOf, RATE, ESCAPE_SQ, clampRate} from './fractals.js?v=41';
+import {spots} from './spots.js?v=41';
+import {Renderer, MAX_FRAMES} from './renderer.js?v=41';
+import {countVisit, countOnce} from './count.js?v=41';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -130,7 +131,7 @@ const recording = () => !!cantus?.recording();
 let audio = null;
 const pending = [];
 const send = (m) => (audio?.node ? audio.node.port.postMessage(m) : pending.push(m));
-const workletURL = new URL('./synth-worklet.js?v=40', import.meta.url);
+const workletURL = new URL('./synth-worklet.js?v=41', import.meta.url);
 
 const setupMessages = () => [
   {type: 'fractal', index: state.type, param: kOf()},
@@ -982,6 +983,7 @@ stage.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     return;
   }
+  countOnce('press-fractal');
   interruptShow();
   startAudio();
   closeSettings();
@@ -1404,7 +1406,7 @@ const loadHash = () => {
 /** the song mode, loaded the first time it is needed; true when it is there */
 const loadCantus = async () => {
   if (!cantus) {
-    cantusLoading ||= import('./cantus/show.js?v=40').then((m) =>
+    cantusLoading ||= import('./cantus/show.js?v=41').then((m) =>
       m.initShow({
         state,
         fractals,
@@ -1494,3 +1496,5 @@ if (songLink) openSongLink(location.hash);
 requestAnimationFrame(tick);
 // draw the gallery's small pictures while the visitor is still reading
 setTimeout(makeThumbs, 1500);
+
+countVisit();
